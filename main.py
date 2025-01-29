@@ -7,8 +7,8 @@ cur_apteka_link = input("Введите ссылку на аптеку: ")
 
 def main():
     # Запускаем планировщик в основном потоке
-
-    start_schedule(cur_apteka, cur_apteka_link)
+    job(cur_apteka, cur_apteka_link)
+    #start_schedule(cur_apteka, cur_apteka_link)
 
 if __name__ == "__main__":
     main()

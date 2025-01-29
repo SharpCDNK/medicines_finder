@@ -21,7 +21,7 @@ def job(cur_apteka, cur_apteka_link):
 def run_schedule(cur_apteka, cur_apteka_link):
     global stop_scheduler
     # Времена выполнения задач
-    task_times = ["12:12", "10:20", "14:20", "16:28", "20:20", "22:20"]
+    task_times = ["12:21", "10:20", "14:20", "16:28", "20:20", "22:20"]
 
     while not stop_scheduler:
         current_time = datetime.now().strftime('%H:%M')

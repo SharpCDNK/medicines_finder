@@ -1,11 +1,6 @@
 import time
 import random
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
+import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 import re
@@ -14,7 +9,6 @@ from datetime import datetime
 from utils import get_latest_file_path  # Убедитесь, что этот метод определен
 
 def parse_table(soup):
-    # Найдите таблицу
     table = soup.find('table', {'class': 'table-border'})
     if not table:
         print("Таблица не найдена на странице.")
@@ -62,65 +56,31 @@ def clean_data(data):
     return cleaned_data
 
 def get_parser_data(url, path_to_save):
-    options = Options()
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-
-    driver = webdriver.Chrome(service=Service(), options=options)
-    try:
-        driver.get(url)
-        print("Страница загружена успешно.")
-    except Exception as e:
-        print(f"Ошибка при загрузке страницы: {e}")
-        driver.quit()
-        return
-
-    try:
-        carrets = WebDriverWait(driver, 20).until(
-            EC.presence_of_all_elements_located((By.CSS_SELECTOR, '.select-check-carret'))
-        )
-        driver.execute_script("arguments[0].scrollIntoView(true);", carrets[1])
-        driver.execute_script("arguments[0].click();", carrets[1])
-
-        option_100 = WebDriverWait(driver, 20).until(
-            EC.element_to_be_clickable((By.XPATH, '//input[@value="100"]/following-sibling::label'))
-        )
-        driver.execute_script("arguments[0].scrollIntoView(true);", option_100)
-        driver.execute_script("arguments[0].click();", option_100)
-
-    except Exception as e:
-        print("Ошибка при взаимодействии с элементами страницы:", e)
-        driver.quit()
-        return
-
     all_data = []
+    page = 1
 
     while True:
-        try:
-            time.sleep(random.uniform(2, 4))  # Увеличиваем время ожидания
-            soup = BeautifulSoup(driver.page_source, 'html.parser')
-            page_data = parse_table(soup)
-
-            if not page_data:
-                print("Нет данных для отображения на этой странице.")
-                break
-
-            all_data.extend(page_data)
-            print("Данные текущей страницы:")
-            for item in page_data:
-                print(item)
-
-            button_next = WebDriverWait(driver, 20).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, '.table-pagination-next a'))
-            )
-            driver.execute_script("arguments[0].scrollIntoView(true);", button_next)
-            driver.execute_script("arguments[0].click();", button_next)
-
-        except Exception as e:
-            print("Ошибка при переходе на следующую страницу:", e)
+        response = requests.get(f"{url}?page={page}")
+        if response.status_code != 200:
+            print(f"Ошибка при загрузке страницы {page}: {response.status_code}")
             break
 
-    driver.quit()
+        soup = BeautifulSoup(response.content, 'html.parser')
+        page_data = parse_table(soup)
+
+        if not page_data:
+            print(f"Нет данных на странице {page}. Завершение.")
+            break
+
+        all_data.extend(page_data)
+        print(f"Данные страницы {page}:")
+        for item in page_data:
+            print(item)
+
+        # Пауза между запросами
+        time.sleep(random.uniform(2, 4))
+        page += 1
+
     cleaned_data = clean_data(all_data)
 
     # Создание DataFrame и запись в Excel
