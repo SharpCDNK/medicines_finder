@@ -67,7 +67,12 @@ def get_parser_data(url, path_to_save):
 
     # Настройка Selenium
     driver = webdriver.Chrome()  # Убедитесь, что chromedriver в PATH
-    driver.get(url)
+    try:
+        driver.get(url)
+    except Exception as e:
+        print(f"Ошибка при загрузке страницы: {e}")
+        driver.quit()
+        return
 
     carrets = WebDriverWait(driver, 10).until(
         EC.presence_of_all_elements_located((By.CSS_SELECTOR, '.select-check-carret'))
@@ -127,9 +132,10 @@ def get_parser_data(url, path_to_save):
     last_file = get_latest_file_path(path_to_save)
 
     # Определяем индекс последнего файла
-    if last_file:
-        last_index = int(os.path.splitext(os.path.basename(last_file))[0].split('_')[
-                             -1])  # Предполагается, что индекс находится в названии файла
+    match = re.search(r'data_(\d+)_2025', last_file)
+
+    if match:
+        last_index = int(match.group(1))
     else:
         last_index = 0  # Если файлов нет, начинаем с 0
 

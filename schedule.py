@@ -1,61 +1,52 @@
 import os
 import time
 from datetime import datetime
-import threading
-from parser import *  # Ensure this library is implemented
+from utils import *  # Убедитесь, что эта библиотека реализована
+from parser import *  # Убедитесь, что эта библиотека реализована
 
-# Flag for stopping the thread
-stop_thread = False
+# Флаг для остановки планировщика
+stop_scheduler = False
 
-# Function to execute the job
-def job(cur_apteka,cur_apteka_link):
-
+# Функция для выполнения задачи
+def job(cur_apteka, cur_apteka_link):
+    print(cur_apteka, ' ', cur_apteka_link)
     if cur_apteka and cur_apteka_link:
         print(f"Запуск парсера для {cur_apteka} в {datetime.now().strftime('%H:%M')}")
-        # Save data
+        # Сохраняем данные
         save_directory = os.path.join(os.getcwd(), 'Datasets', 'competitors', cur_apteka)
         os.makedirs(save_directory, exist_ok=True)
         get_parser_data(cur_apteka_link, save_directory)
 
-# Scheduler function
-def run_schedule():
-    global stop_thread
+# Планировщик
+def run_schedule(cur_apteka, cur_apteka_link):
+    global stop_scheduler
+    # Времена выполнения задач
+    task_times = ["09:20", "10:20", "14:20", "16:28", "20:20", "22:20"]
 
-    # Task times for execution
-    task_times = ["09:20", "11:20", "14:20", "15:45", "20:20", "22:20"]
-
-    while not stop_thread:
+    while not stop_scheduler:
         current_time = datetime.now().strftime('%H:%M')
 
-        # Check if current time matches any scheduled time
+        # Проверяем, совпадает ли текущее время с любым из запланированных
         if current_time in task_times:
             print(f"Время совпало: {current_time}, запускаем задачу!")
-            job()
-            # Wait one minute to avoid re-running in the same minute
+            job(cur_apteka, cur_apteka_link)
+            # Ждем одну минуту, чтобы избежать повторного запуска в ту же минуту
             time.sleep(60)
         else:
-            # Sleep for one second to prevent CPU overload
+            # Ждем одну секунду, чтобы предотвратить перегрузку процессора
             time.sleep(1)
 
-# Function to stop the scheduler
-def stop_schedule():
-    global stop_thread
-    stop_thread = True
-
-# Start the scheduler in a separate thread
-def start_thread():
-    thread = threading.Thread(target=run_schedule)
-    thread.daemon = True  # Thread will stop when the program exits
-    thread.start()
-    return thread
-
-# Function to start the scheduling process
-def start_schedule():
+# Функция для запуска процесса планирования
+def start_schedule(cur_apteka, cur_apteka_link):
+    global stop_scheduler
     print("Запуск планировщика...")
-    thread = start_thread()
+    try:
+        run_schedule(cur_apteka, cur_apteka_link)
+    except KeyboardInterrupt:
+        print("Планировщик остановлен.")
 
-    input("Нажмите Enter, чтобы завершить выполнение...\n")
-
-    stop_schedule()
-    thread.join()  # Wait for the thread to finish
-
+# Функция для остановки планировщика
+def stop_schedule():
+    global stop_scheduler
+    stop_scheduler = True
+    print("Планировщик завершен.")
