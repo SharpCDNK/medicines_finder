@@ -23,18 +23,28 @@ def run_schedule(cur_apteka, cur_apteka_link):
     # Времена выполнения задач
     task_times = ["09:20", "11:20", "13:20", "15:20", "17:20", "19:20", "21:20", "23:20"]
 
+    # Словарь для хранения времени последнего выполнения
+    last_run_time = None
+
     while not stop_scheduler:
         current_time = datetime.now().strftime('%H:%M')
 
         # Проверяем, совпадает ли текущее время с любым из запланированных
-        if current_time in task_times:
+        if current_time in task_times and current_time != last_run_time:
             print(f"Время совпало: {current_time}, запускаем задачу!")
             job(cur_apteka, cur_apteka_link)
+            last_run_time = current_time  # Обновляем время последнего выполнения
             # Ждем одну минуту, чтобы избежать повторного запуска в ту же минуту
             time.sleep(60)
         else:
-            # Ждем одну секунду, чтобы предотвратить перегрузку процессора
-            time.sleep(1)
+            os.system('clear')
+            print("Аптека: ", cur_apteka, ", ссылка: ", cur_apteka_link)
+            print({current_time}, "- текущее время.")
+            time.sleep(4)
+
+        # Проверяем, если уже следующий день, сбрасываем last_run_time
+        if current_time == "00:00":
+            last_run_time = None
 
 # Функция для запуска процесса планирования
 def start_schedule(cur_apteka, cur_apteka_link):
