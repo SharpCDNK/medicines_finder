@@ -86,16 +86,15 @@ def get_parser_data(url, path_to_save):
     # Создание DataFrame и запись в Excel
     df = pd.DataFrame(cleaned_data)
 
-    # Получаем путь к последнему файлу
     last_file = get_latest_file_path(path_to_save)
-
-    # Определяем индекс последнего файла
-    match = re.search(r'data_(\d+)_2025', last_file)
-
-    if match:
-        last_index = int(match.group(1))
+    if last_file == None:
+        last_index = 0
     else:
-        last_index = 0  # Если файлов нет, начинаем с 0
+        match = re.search(r'data_(\d+)_2025', last_file)
+
+        if match:
+            last_index = int(match.group(1))
+
 
     # Создаем новый индекс
     new_index = last_index + 1
