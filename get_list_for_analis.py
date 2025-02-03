@@ -19,15 +19,16 @@ output_path = "Datasets/list_for_analis"
 if not os.path.exists(output_path):
     os.makedirs(output_path)
 
+
 # Функция для получения индекса из имени файла
 def get_index_from_filename(file_name):
     match = re.search(r'diff_parsed_data_(\d+)_', file_name)
     return int(match.group(1)) if match else None
 
+
 # Функция для обработки одного конкурента
 def process_competitor(competitor_name):
     folder_path = os.path.join(base_path, competitor_name)
-
     # Список для хранения данных
     all_data = []
     unique_records = set()  # Множество для проверки уникальности строк по первым 6 колонкам
@@ -39,7 +40,6 @@ def process_competitor(competitor_name):
     # Проходимся по всем файлам в папке конкурента
     for file_name in files:
         file_path = os.path.join(folder_path, file_name)
-
         try:
             # Читаем Excel файл
             df = pd.read_excel(file_path, engine="openpyxl")
@@ -49,6 +49,10 @@ def process_competitor(competitor_name):
             if all(column in df.columns for column in required_columns):
                 # Очищаем данные от лишних пробелов в строках
                 df[required_columns] = df[required_columns].apply(lambda x: x.str.strip() if x.dtype == 'object' else x)
+
+                # Фильтруем данные по item_type
+                excluded_types = ["БАД", "Косметика", "Питание", "Прочее", "зубные пасты и проч.","Продукты питания"]
+                df = df[~df['item_type'].isin(excluded_types)]
 
                 # Добавляем данные в общий список, проверяя на уникальность
                 for _, row in df[required_columns].iterrows():
@@ -61,7 +65,6 @@ def process_competitor(competitor_name):
                     else:
                         log_message = f"Пропущена дублирующая запись из файла {file_name}: {row.to_dict()}"
                         logging.info(log_message)
-
         except Exception as e:
             error_message = f"Ошибка при обработке файла {file_name}: {e}"
             logging.error(error_message)
@@ -69,12 +72,10 @@ def process_competitor(competitor_name):
     # Если данные найдены, объединяем их и сохраняем в Excel
     if all_data:
         combined_df = pd.DataFrame(all_data)
-
         # Создаем папку для конкурента, если она еще не создана
         competitor_output_path = os.path.join(output_path, competitor_name)
         if not os.path.exists(competitor_output_path):
             os.makedirs(competitor_output_path)
-
         # Сохраняем результат в файл Excel
         output_file = os.path.join(competitor_output_path, f"{competitor_name}_list_for_analis.xlsx")
         combined_df.to_excel(output_file, index=False, engine="openpyxl")
@@ -88,10 +89,8 @@ def process_competitor(competitor_name):
 
 
 # Основной цикл для обработки всех папок конкурентов с использованием multiprocessing
-
 # Получаем список конкурентов
-competitors = [competitor for competitor in os.listdir(base_path) if
-               os.path.isdir(os.path.join(base_path, competitor))]
+competitors = [competitor for competitor in os.listdir(base_path) if os.path.isdir(os.path.join(base_path, competitor))]
 
 # Запускаем процессы для каждого конкурента
 with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:

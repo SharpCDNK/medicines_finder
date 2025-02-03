@@ -37,6 +37,9 @@ def process_file(file_path):
     df[f"{price_column}_число"] = pd.to_numeric(df[f"{price_column}_число"], errors='coerce')
     print(f"Первые значения в обработанном столбце цены:\n{df[[price_column, f'{price_column}_число']].head()}")
 
+    # Заполняем пропуски в столбце цен нулями
+    df.loc[:, f"{price_column}_число"] = df[f"{price_column}_число"].fillna(0)
+
     # Вычисляем индекс изменений (продажи)
     def calculate_sold(row):
         sold = 0
