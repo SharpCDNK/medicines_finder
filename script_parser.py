@@ -25,7 +25,8 @@ for entry in data:
         # Определяем операционную систему
         if platform.system() == 'Windows':
             # Для Windows
-            subprocess.Popen(['python', 'main.py', name, url], creationflags=subprocess.CREATE_NEW_CONSOLE)
+            command = f'powershell -NoExit -Command "python main.py \'{name}\' \'{url}\'; Write-Host \\"Нажмите любую клавишу для выхода...\\"; $Host.UI.RawUI.ReadKey() | Out-Null"'
+            subprocess.Popen(command, shell=True)
         else:
             # Для Linux/macOS
             subprocess.Popen(['gnome-terminal', '--', 'python', 'main.py', name, url])  # Для Linux
