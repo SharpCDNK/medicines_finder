@@ -25,9 +25,15 @@ for entry in data:
         print(f'Запуск main.py с аргументами: {name} {url}')
 
         # Определяем операционную систему
+        import subprocess
+        import platform
+
+        import subprocess
+        import platform
+
         if platform.system() == 'Windows':
             # Для Windows
-            command = f'powershell -NoExit -Command "python main.py \'{name}\' \'{url}\'; Write-Host \\"Нажмите любую клавишу для выхода...\\"; $Host.UI.RawUI.ReadKey() | Out-Null"'
+            command = f'powershell -NoExit -Command "Start-Process powershell -ArgumentList \'-NoExit -Command \"python main.py \\\'{name}\\\' \\\'{url}\\\'\"\'"'
             subprocess.Popen(command, shell=True)
         else:
             # Для Linux
