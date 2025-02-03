@@ -6,54 +6,39 @@ import pandas as pd
 import re
 import os
 from datetime import datetime
-from utils import get_latest_file_path  # Убедитесь, что этот метод определен
+from utils import get_latest_file_path  # Ensure this method is defined
+
+
+def parse_product_card(card):
+    name = card.find('div', class_='product-card__name').text.strip()
+    form = card.find('div', class_='product-card__fas').text.strip()
+    producer = card.find('div', class_='product-card__country').text.strip()
+
+    price_info = card.find('span', class_='second-price').text.strip()
+    quantity_info = card.find('div', class_='pharmacy-card__count').text.strip()
+
+    return {
+        'name': name,
+        'form': form,
+        'producer': producer,
+        'price': price_info,
+        'quantity': quantity_info
+    }
+
 
 def parse_table(soup):
-    table = soup.find('table', {'class': 'table-border'})
-    if not table:
-        print("Таблица не найдена на странице.")
+    product_cards = soup.find_all('div', class_='product-card')
+    if not product_cards:
+        print("Продукты не найдены на странице.")
         return []
 
     data = []
-    for row in table.find_all('tr')[1:]:
-        cols = row.find_all('td')
-        if len(cols) < 5:
-            continue
-        item = {
-            'name': cols[0].text.strip(),
-            'form': cols[1].text.strip(),
-            'producer': cols[2].text.strip(),
-            'price': cols[4].find(class_='price-value').text.strip(),
-            'quantity': cols[4].find(class_='capture').text.strip()
-        }
+    for card in product_cards:
+        item = parse_product_card(card)
         data.append(item)
 
     return data
 
-def clean_data(data):
-    cleaned_data = []
-    for item in data:
-        name_parts = item['name'].split('\n')
-        form_parts = item['form'].split('\n')
-        producer_parts = item['producer'].split('\n')
-
-        quantity_match = re.search(r'\d+\.?\d*', item['quantity'])
-        only_quantity = quantity_match.group(0) if quantity_match else ''
-
-        cleaned_item = {
-            'name': name_parts[0],
-            'item_type': name_parts[-1].strip() if len(name_parts) > 1 else '',
-            'item_form': form_parts[0],
-            'prescription': form_parts[-1].strip() if len(form_parts) > 1 else '',
-            'manufacturer': producer_parts[0].strip(),
-            'country': producer_parts[-1].strip() if len(producer_parts) > 1 else '',
-            'price': item['price'],
-            'quantity': item['quantity'],
-            'only_quantity': only_quantity
-        }
-        cleaned_data.append(cleaned_item)
-
-    return cleaned_data
 
 def get_parser_data(url, path_to_save):
     all_data = []
@@ -77,17 +62,26 @@ def get_parser_data(url, path_to_save):
         for item in page_data:
             print(item)
 
-        # Пауза между запросами
+        # Check for "показать еще" button
+        next_button = soup.find('a', class_='modal-link get-next-page')
+        if next_button:
+            print("Кнопка 'показать еще' найдена. Переход к следующей странице.")
+            # Simulate clicking the button by incrementing the page number
+            page += 1
+        else:
+            print("Кнопка 'показать еще' не найдена. Завершение.")
+            break
+
+        # Pause between requests
         time.sleep(random.uniform(2, 4))
-        page += 1
 
     cleaned_data = clean_data(all_data)
 
-    # Создание DataFrame и запись в Excel
+    # Create DataFrame and write to Excel
     df = pd.DataFrame(cleaned_data)
 
     last_file = get_latest_file_path(path_to_save)
-    if last_file == None:
+    if last_file is None:
         last_index = 0
     else:
         match = re.search(r'data_(\d+)_2025', last_file)
@@ -95,16 +89,15 @@ def get_parser_data(url, path_to_save):
         if match:
             last_index = int(match.group(1))
 
-
-    # Создаем новый индекс
+    # Create new index
     new_index = last_index + 1
     current_time = datetime.now().strftime('%Y-%m-%d_%H-%M')
 
-    # Создание имени файла с датой и временем
+    # Create filename with date and time
     file_name = f'parsed_data_{new_index}_{current_time}.xlsx'
     df.to_excel(os.path.join(path_to_save, file_name), index=False)
 
     print(f'Сохранен файл: {os.path.join(path_to_save, file_name)}')
 
-# Пример вызова функции
+# Example call
 # get_parser_data('URL_СТРАНИЦЫ', 'ПУТЬ_К_ПАПКЕ_ДЛЯ_СОХРАНЕНИЯ')
