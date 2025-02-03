@@ -106,9 +106,8 @@ async def get_all_pages(url, file_name):
             print("Не удалось получить общее количество позиций.")
             return
 
-        items_per_page = 10  # Укажите фактическое количество позиций на странице
+        items_per_page = 20  # Укажите фактическое количество позиций на странице
         total_pages = total_positions // items_per_page + (1 if total_positions % items_per_page else 0)
-
         page = 1
         while page <= total_pages:
             html_content = await fetch_page(session, url, page)
