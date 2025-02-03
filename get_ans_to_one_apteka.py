@@ -28,17 +28,23 @@ def process_file(file_path):
     # Приводим данные количественных столбцов к числовому типу
     df[quantity_columns] = df[quantity_columns].apply(pd.to_numeric, errors='coerce')
 
-    # Приводим столбец с ценой (7-я колонка) к числовому формату
-    price_column = df.columns[6]
+    # Приводим столбцы с ценами к числовому типу
+    # Предполагаем, что у вас есть колонка "Медианная цена"
+    price_column = "Медианная цена"
+    if price_column not in df.columns:
+        print(f"Ошибка: столбец '{price_column}' отсутствует в файле {file_path}")
+        return None
     print(f"Обрабатывается столбец с ценой: {price_column}")
 
-    # Преобразуем цену, оставляя числовое значение, и сохраняем исходный столбец
-    df[f"{price_column}_число"] = df[price_column].str.replace(r"[^\d.,]", "", regex=True).str.replace(",", ".").str.strip(".")
-    df[f"{price_column}_число"] = pd.to_numeric(df[f"{price_column}_число"], errors='coerce')
-    print(f"Первые значения в обработанном столбце цены:\n{df[[price_column, f'{price_column}_число']].head()}")
+    # Преобразуем столбец с ценой в числовой тип
+    df[price_column] = df[price_column].astype(str).str.replace(',', '.')
+    df[price_column] = df[price_column].str.extract(r'(\d+\.?\d*)', expand=False)
+    df[price_column] = pd.to_numeric(df[price_column], errors='coerce')
+
+    print(f"Первые значения в столбце цены:\n{df[[price_column]].head()}")
 
     # Заполняем пропуски в столбце цен нулями
-    df.loc[:, f"{price_column}_число"] = df[f"{price_column}_число"].fillna(0)
+    df[price_column] = df[price_column].fillna(0)
 
     # Вычисляем индекс изменений (продажи)
     def calculate_sold(row):
@@ -46,16 +52,17 @@ def process_file(file_path):
         for i in range(1, len(quantity_columns)):
             prev = row[quantity_columns[i - 1]]
             curr = row[quantity_columns[i]]
-            if curr < prev:
-                sold += prev - curr
+            if pd.notnull(prev) and pd.notnull(curr):
+                if curr < prev:
+                    sold += prev - curr
         return sold
 
     df["Индекс изменений"] = df.apply(calculate_sold, axis=1)
     print(f"Первые значения индекса изменений:\n{df[['Индекс изменений']].head()}")
 
-    # Вычисляем новый индекс "Заработали" = "Индекс изменений" * минимальная цена
-    df["Заработали"] = df["Индекс изменений"] * df[f"{price_column}_число"]
-    print(f"Первые значения индекса 'Заработали':\n{df[['Индекс изменений', f'{price_column}_число', 'Заработали']].head()}")
+    # Вычисляем новый индекс "Заработали" = "Индекс изменений" * "Медианная цена"
+    df["Заработали"] = df["Индекс изменений"] * df[price_column]
+    print(f"Первые значения индекса 'Заработали':\n{df[['Индекс изменений', price_column, 'Заработали']].head()}")
 
     # Фильтруем строки, в которых "Индекс изменений" > 0
     df_filtered = df[df["Индекс изменений"] > 0]
