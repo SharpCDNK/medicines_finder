@@ -20,7 +20,7 @@ if not os.path.exists(output_path):
 
 # Функция для получения индекса из имени файла
 def get_index_from_filename(file_name):
-    match = re.search(r'difference_parsed_data_(\d+)_', file_name)
+    match = re.search(r'diff_parsed_data_(\d+)_', file_name)
     return int(match.group(1)) if match else None
 
 # Функция для обработки одного конкурента

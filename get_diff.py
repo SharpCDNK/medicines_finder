@@ -30,7 +30,7 @@ def find_differences(apteka_file, competitors_dir, output_dir):
                     # Записываем результат, если есть отличия
                     if diff_items:
                         diff_df = df[df.iloc[:, 0].isin(diff_items)]
-                        output_file = os.path.join(diff_folder, f"difference_{file}")
+                        output_file = os.path.join(diff_folder, f"diff_{file}")
                         diff_df.to_excel(output_file, index=False)
                         print(f"Разница сохранена: {output_file}")
 
