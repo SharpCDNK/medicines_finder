@@ -2,6 +2,7 @@ import os
 import pandas as pd
 import logging
 import re
+import multiprocessing
 
 # Настройка логирования
 logging.basicConfig(
@@ -24,9 +25,12 @@ def get_index_from_filename(file_name):
     return int(match.group(1)) if match else None
 
 # Функция для обработки одного конкурента
-def process_competitor(folder_path, competitor_name):
+def process_competitor(competitor_name):
+    folder_path = os.path.join(base_path, competitor_name)
+
     # Список для хранения данных
     all_data = []
+    unique_records = set()  # Множество для проверки уникальности строк по первым 6 колонкам
 
     # Получаем список файлов и сортируем по индексу
     files = [f for f in os.listdir(folder_path) if f.endswith(".xlsx") or f.endswith(".xls")]
@@ -46,11 +50,18 @@ def process_competitor(folder_path, competitor_name):
                 # Очищаем данные от лишних пробелов в строках
                 df[required_columns] = df[required_columns].apply(lambda x: x.str.strip() if x.dtype == 'object' else x)
 
-                # Добавляем данные в общий список
+                # Добавляем данные в общий список, проверяя на уникальность
                 for _, row in df[required_columns].iterrows():
-                    log_message = f"Обрабатывается запись из файла {file_name}: {row.to_dict()}"
-                    logging.info(log_message)
-                    all_data.append(row.to_dict())
+                    record_key = tuple(row[col] for col in required_columns[:6])  # Ключ — первые 6 колонок
+                    if record_key not in unique_records:
+                        unique_records.add(record_key)  # Добавляем ключ в множество
+                        all_data.append(row.to_dict())  # Добавляем запись в общий список
+                        log_message = f"Добавлена уникальная запись из файла {file_name}: {row.to_dict()}"
+                        logging.info(log_message)
+                    else:
+                        log_message = f"Пропущена дублирующая запись из файла {file_name}: {row.to_dict()}"
+                        logging.info(log_message)
+
         except Exception as e:
             error_message = f"Ошибка при обработке файла {file_name}: {e}"
             logging.error(error_message)
@@ -75,13 +86,13 @@ def process_competitor(folder_path, competitor_name):
         print(no_data_message)
         logging.warning(no_data_message)
 
-# Основной цикл для обработки всех папок конкурентов
-for competitor in os.listdir(base_path):
-    competitor_path = os.path.join(base_path, competitor)
 
-    # Проверяем, что это папка
-    if os.path.isdir(competitor_path):
-        start_message = f"Обработка данных для конкурента: {competitor}"
-        print(start_message)
-        logging.info(start_message)
-        process_competitor(competitor_path, competitor)
+# Основной цикл для обработки всех папок конкурентов с использованием multiprocessing
+
+# Получаем список конкурентов
+competitors = [competitor for competitor in os.listdir(base_path) if
+               os.path.isdir(os.path.join(base_path, competitor))]
+
+# Запускаем процессы для каждого конкурента
+with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
+    pool.map(process_competitor, competitors)
