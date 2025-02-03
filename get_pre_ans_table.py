@@ -29,30 +29,27 @@ def generate_pre_ans_table(analysis_dir, diff_comp_dir, output_dir):
         product_df['key'] = product_df[key_columns].agg('|'.join, axis=1)
         pre_ans = pd.DataFrame({'key': product_df['key']})
         pre_ans[key_columns] = product_df[key_columns]
+        pre_ans['Цена min'] = "-"
+        pre_ans['Цена max'] = "-"
 
         print(f"\nОбрабатываю товары для конкурента: {competitor}")
         print(f"Читаю список товаров из: {competitor_analysis_path}")
 
         diff_files = []
         for diff_file in os.listdir(competitor_diff_path):
-            if not diff_file.endswith(".xls") and not diff_file.endswith(".xlsx"):
+            if not diff_file.endswith(('.xls', '.xlsx')):
                 continue
-            match = re.search(r"diff_parsed_data_(\d+)_", diff_file)
+            match = re.search(r"diff_parsed_data_(\d+)_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2})", diff_file)
             if match:
                 index = int(match.group(1))
-                diff_files.append((index, diff_file))
+                date_time = match.group(2)
+                diff_files.append((index, date_time, diff_file))
 
-        diff_files = sorted(diff_files, key=lambda x: x[0])
+        diff_files.sort(key=lambda x: x[0])
 
-        for index, diff_file in diff_files:
+        for index, date_time, diff_file in diff_files:
             diff_file_path = os.path.join(competitor_diff_path, diff_file)
-            match = re.search(r"diff_parsed_data_\d+_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2})", diff_file)
-            if not match:
-                print(f"Файл {diff_file} не соответствует шаблону имени. Пропускаю.")
-                continue
-            date_time = match.group(1).replace("_", " ").replace("-", ":", 1)
-
-            print(f"Читаю diff файл: {diff_file_path} (дата: {date_time})")
+            print(f"Читаю diff файл: {diff_file_path}")
 
             try:
                 df = pd.read_excel(diff_file_path, dtype=str).dropna()
@@ -65,11 +62,21 @@ def generate_pre_ans_table(analysis_dir, diff_comp_dir, output_dir):
                 continue
 
             df['key'] = df.iloc[:, :6].agg('|'.join, axis=1)
-            price_info = df.set_index('key').iloc[:, 6].to_dict()
-            quantity_info = df.set_index('key').iloc[:, 8].to_dict()
+            price_info = df.set_index('key').iloc[:, 6].astype(str).to_dict()
 
-            pre_ans[f"Цена {date_time}"] = pre_ans['key'].map(price_info).fillna("-")
-            pre_ans[f"Количество {date_time}"] = pre_ans['key'].map(quantity_info).fillna("-")
+            def safe_min(value1, value2):
+                values = [v for v in [value1, value2] if isinstance(v, str) and v != "-"]
+                return min(values) if values else "-"
+
+            def safe_max(value1, value2):
+                values = [v for v in [value1, value2] if isinstance(v, str) and v != "-"]
+                return max(values) if values else "-"
+
+            pre_ans['Цена min'] = pre_ans.apply(lambda row: safe_min(price_info.get(row['key'], "-"), row['Цена min']), axis=1)
+            pre_ans['Цена max'] = pre_ans.apply(lambda row: safe_max(price_info.get(row['key'], "-"), row['Цена max']), axis=1)
+
+            quantity_info = df.set_index('key').iloc[:, 8].to_dict()
+            pre_ans[f"Количество {index}_{date_time}"] = pre_ans['key'].map(quantity_info).fillna("-")
 
         pre_ans.drop(columns=['key'], inplace=True)
         output_file = os.path.join(output_dir, f"pre_ans_{competitor}.xlsx")
