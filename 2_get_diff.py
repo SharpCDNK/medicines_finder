@@ -44,7 +44,7 @@ def find_differences(apteka_file, competitors_dir, output_dir):
 
 
 # Пример использования
-apteka_file_path = "Datasets/our_pharmacies/apteka_9/parsed_data_1_2025-02-02_18-19.xlsx"
+apteka_file_path = "Datasets/our_pharmacies/nasha_apteka_12/parsed_data_5_2025-02-03_19-55.xlsx"
 competitors_directory = "Datasets/competitors"
 output_directory = "Datasets/diff_comp"
 
