@@ -4,6 +4,7 @@ import random
 import csv
 import re
 import os
+import platform
 from bs4 import BeautifulSoup
 from datetime import datetime
 
@@ -121,6 +122,12 @@ async def get_all_pages(url, file_name):
 
             cleaned_data = [clean_single_item(item) for item in page_data]
             save_to_csv(cleaned_data, file_name)
+
+            # Очистка консоли в зависимости от операционной системы
+            if os.name == 'nt':
+                os.system('cls')  # Для Windows
+            else:
+                os.system('clear')  # Для Ubuntu/Linux/MacOS
 
             print(f"Страница {page}/{total_pages} обработана и данные сохранены.")
 
