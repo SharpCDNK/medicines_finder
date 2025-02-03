@@ -1,14 +1,24 @@
 import asyncio
 import aiohttp
 import random
-import pandas as pd
+import csv
 import re
 import os
 from bs4 import BeautifulSoup
 from datetime import datetime
-from multiprocessing import Pool
-from utils import get_latest_file_path  # Убедись, что этот метод определён
 
+async def fetch_page(session, url, page):
+    try:
+        params = {'page': page}
+        async with session.get(url, params=params) as response:
+            if response.status != 200:
+                print(f"Ошибка при загрузке страницы {page}: {response.status}")
+                return None
+            html_content = await response.text()
+            return html_content
+    except Exception as e:
+        print(f"Исключение при загрузке страницы {page}: {e}")
+        return None
 
 def parse_table(html_content):
     soup = BeautifulSoup(html_content, 'html.parser')
@@ -32,7 +42,6 @@ def parse_table(html_content):
         data.append(item)
     return data
 
-
 def clean_single_item(item):
     name_parts = item['name'].split('\n')
     form_parts = item['form'].split('\n')
@@ -54,79 +63,76 @@ def clean_single_item(item):
     }
     return cleaned_item
 
+def save_to_csv(cleaned_data, file_name):
+    file_exists = os.path.isfile(file_name)
+    with open(file_name, 'a', newline='', encoding='utf-8') as csvfile:
+        fieldnames = ['name', 'item_type', 'item_form', 'prescription', 'manufacturer', 'country', 'price', 'quantity', 'only_quantity']
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
-def clean_data(data):
-    with Pool() as pool:
-        cleaned_data = pool.map(clean_single_item, data)
-    return cleaned_data
+        if not file_exists:
+            writer.writeheader()
 
+        for item in cleaned_data:
+            writer.writerow(item)
 
-async def fetch_page(session, url, page):
+async def get_total_positions(session, url):
     try:
-        async with session.get(f"{url}?page={page}") as response:
+        async with session.get(url) as response:
             if response.status != 200:
-                print(f"Ошибка при загрузке страницы {page}: {response.status}")
+                print(f"Ошибка при загрузке страницы: {response.status}")
                 return None
             html_content = await response.text()
-            return html_content
+            soup = BeautifulSoup(html_content, 'html.parser')
+            label_div = soup.find('div', class_='bttn-check')
+            if label_div:
+                label = label_div.find('label')
+                if label:
+                    text = label.get_text(strip=True)
+                    match = re.search(r'Найдено позиций в продаже - (\d+)', text)
+                    if match:
+                        total_positions = int(match.group(1))
+                        return total_positions
+            print("Не удалось определить общее количество позиций.")
+            return None
     except Exception as e:
-        print(f"Исключение при загрузке страницы {page}: {e}")
+        print(f"Исключение при получении общего количества позиций: {e}")
         return None
 
-
-async def get_all_pages(url):
-    all_data = []
-    page = 1
-
+async def get_all_pages(url, file_name):
     async with aiohttp.ClientSession() as session:
-        while True:
+        total_positions = await get_total_positions(session, url)
+        if not total_positions:
+            print("Не удалось получить общее количество позиций.")
+            return
+
+        items_per_page = 10  # Укажите фактическое количество позиций на странице
+        total_pages = total_positions // items_per_page + (1 if total_positions % items_per_page else 0)
+
+        page = 1
+        while page <= total_pages:
             html_content = await fetch_page(session, url, page)
             if not html_content:
                 break
 
             page_data = parse_table(html_content)
             if not page_data:
-                print(f"Нет данных на странице {page}. Завершение.")
+                print(f"Нет данных на странице {page}.")
                 break
 
-            all_data.extend(page_data)
-            print(f"Страница {page} обработана.")
+            cleaned_data = [clean_single_item(item) for item in page_data]
+            save_to_csv(cleaned_data, file_name)
+
+            print(f"Страница {page}/{total_pages} обработана и данные сохранены.")
 
             page += 1
             await asyncio.sleep(random.uniform(0.5, 1.5))  # Небольшая пауза между запросами
 
-    return all_data
-
-
-def save_to_excel(cleaned_data, path_to_save):
-    df = pd.DataFrame(cleaned_data)
-
-    last_file = get_latest_file_path(path_to_save)
-    if last_file is None:
-        last_index = 0
-    else:
-        match = re.search(r'parsed_data_(\d+)_', last_file)
-        if match:
-            last_index = int(match.group(1))
-        else:
-            last_index = 0
-
-    new_index = last_index + 1
-    current_time = datetime.now().strftime('%Y-%m-%d_%H-%M')
-
-    file_name = f'parsed_data_{new_index}_{current_time}.xlsx'
-    df.to_excel(os.path.join(path_to_save, file_name), index=False)
-
-    print(f'Сохранён файл: {os.path.join(path_to_save, file_name)}')
-
-
 def get_parser_data(url, path_to_save):
+    current_time = datetime.now().strftime('%Y-%m-%d_%H-%M')
+    file_name = os.path.join(path_to_save, f'parsed_data_{current_time}.csv')
+
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    all_data = loop.run_until_complete(get_all_pages(url))
+    loop.run_until_complete(get_all_pages(url, file_name))
 
-    if all_data:
-        cleaned_data = clean_data(all_data)
-        save_to_excel(cleaned_data, path_to_save)
-    else:
-        print("Нет данных для обработки.")
+    print(f'Данные успешно сохранены в файле: {file_name}')
