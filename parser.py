@@ -65,16 +65,8 @@ def clean_single_item(item):
     }
     return cleaned_item
 
-def save_to_csv(cleaned_data, file_name):
+def save_to_csv(cleaned_data, file_name, start_index):
     file_exists = os.path.isfile(file_name)
-    start_index = 0  # Начинаем с 0, если файл не существует
-
-    if file_exists:
-        with open(file_name, 'r', encoding='utf-8') as csvfile:
-            reader = csv.DictReader(csvfile)
-            start_index = sum(1 for _ in reader)  # Считаем строки в файле
-            if start_index > 0:
-                start_index -= 1  # Вычитаем 1 из-за строки заголовков
 
     with open(file_name, 'a', newline='', encoding='utf-8') as csvfile:
         fieldnames = ['index', 'name', 'item_type', 'item_form', 'prescription', 'manufacturer', 'country', 'price', 'quantity', 'only_quantity']
@@ -111,7 +103,7 @@ async def get_total_positions(session, url):
         print(f"Исключение при получении общего количества позиций: {e}")
         return None
 
-async def get_all_pages(url, file_name):
+async def get_all_pages(url, file_name, start_index):
     async with aiohttp.ClientSession() as session:
         total_positions = await get_total_positions(session, url)
         if not total_positions:
@@ -132,7 +124,8 @@ async def get_all_pages(url, file_name):
                 break
 
             cleaned_data = [clean_single_item(item) for item in page_data]
-            save_to_csv(cleaned_data, file_name)
+            save_to_csv(cleaned_data, file_name, start_index)
+            start_index += len(cleaned_data)  # Обновляем стартовый индекс
 
             # Очистка консоли в зависимости от операционной системы
             if os.name == 'nt':
@@ -148,7 +141,7 @@ async def get_all_pages(url, file_name):
 def get_next_file_index(path_to_save, base_filename):
     existing_files = os.listdir(path_to_save)
     indices = []
-    pattern = re.compile(r'^(\d+)_{}'.format(re.escape(base_filename)))
+    pattern = re.compile(r'^(\d+)_{}.*\.csv$'.format(re.escape(base_filename)))
     for filename in existing_files:
         match = pattern.match(filename)
         if match:
@@ -157,17 +150,22 @@ def get_next_file_index(path_to_save, base_filename):
 
 def get_parser_data(url, path_to_save):
     # Определяем базовое имя файла без индекса
-    current_time = datetime.now().strftime('%Y-%m-%d_%H-%M')
-    base_filename = f'parsed_data_{current_time}.csv'
+    base_filename = 'parsed_data'
 
     # Получаем следующий индекс
     index = get_next_file_index(path_to_save, base_filename)
 
-    # Формируем полное имя файла с индексом
-    file_name = os.path.join(path_to_save, f'{index}_{base_filename}')
+    # Время для уникальности имени файла
+    current_time = datetime.now().strftime('%Y-%m-%d_%H-%M')
+
+    # Формируем полное имя файла с индексом и временем
+    file_name = os.path.join(path_to_save, f'{index}_{base_filename}_{current_time}.csv')
+
+    # Начальный индекс для записей внутри файла
+    start_index = 0
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    loop.run_until_complete(get_all_pages(url, file_name))
+    loop.run_until_complete(get_all_pages(url, file_name, start_index))
 
     print(f'Данные успешно сохранены в файле: {file_name}')
