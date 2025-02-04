@@ -53,9 +53,9 @@ def clean_single_item(item):
     only_quantity = quantity_match.group(0) if quantity_match else ''
 
     cleaned_item = {
-        'name': name_parts[0],
+        'name': name_parts[0].strip(),
         'item_type': name_parts[-1].strip() if len(name_parts) > 1 else '',
-        'item_form': form_parts[0],
+        'item_form': form_parts[0].strip(),
         'prescription': form_parts[-1].strip() if len(form_parts) > 1 else '',
         'manufacturer': producer_parts[0].strip(),
         'country': producer_parts[-1].strip() if len(producer_parts) > 1 else '',
@@ -65,20 +65,18 @@ def clean_single_item(item):
     }
     return cleaned_item
 
-def save_to_csv(cleaned_data, file_name, start_index):
+def save_to_csv(cleaned_data, file_name):
     file_exists = os.path.isfile(file_name)
 
     with open(file_name, 'a', newline='', encoding='utf-8') as csvfile:
-        fieldnames = ['index', 'name', 'item_type', 'item_form', 'prescription', 'manufacturer', 'country', 'price', 'quantity', 'only_quantity']
+        fieldnames = ['name', 'item_type', 'item_form', 'prescription', 'manufacturer', 'country', 'price', 'quantity', 'only_quantity']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
         if not file_exists:
             writer.writeheader()
 
-        for idx, item in enumerate(cleaned_data, start=start_index):
-            item_with_index = item.copy()
-            item_with_index['index'] = idx  # Добавляем индекс к элементу
-            writer.writerow(item_with_index)
+        for item in cleaned_data:
+            writer.writerow(item)
 
 async def get_total_positions(session, url):
     try:
@@ -103,7 +101,7 @@ async def get_total_positions(session, url):
         print(f"Исключение при получении общего количества позиций: {e}")
         return None
 
-async def get_all_pages(url, file_name, start_index):
+async def get_all_pages(url, file_name):
     async with aiohttp.ClientSession() as session:
         total_positions = await get_total_positions(session, url)
         if not total_positions:
@@ -124,8 +122,7 @@ async def get_all_pages(url, file_name, start_index):
                 break
 
             cleaned_data = [clean_single_item(item) for item in page_data]
-            save_to_csv(cleaned_data, file_name, start_index)
-            start_index += len(cleaned_data)  # Обновляем стартовый индекс
+            save_to_csv(cleaned_data, file_name)
 
             # Очистка консоли в зависимости от операционной системы
             if os.name == 'nt':
@@ -161,11 +158,7 @@ def get_parser_data(url, path_to_save):
     # Формируем полное имя файла с индексом и временем
     file_name = os.path.join(path_to_save, f'{index}_{base_filename}_{current_time}.csv')
 
-    # Начальный индекс для записей внутри файла
-    start_index = 0
-
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(get_all_pages(url, file_name, start_index))
+    # Запускаем асинхронный парсер
+    asyncio.run(get_all_pages(url, file_name))
 
     print(f'Данные успешно сохранены в файле: {file_name}')
