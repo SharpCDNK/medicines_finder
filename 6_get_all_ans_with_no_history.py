@@ -1,5 +1,7 @@
 import pandas as pd
 import os
+from concurrent.futures import ProcessPoolExecutor
+from functools import partial
 
 # Определяем пути к папкам
 input_folder = "Datasets/pre_ans_sorted"
@@ -15,7 +17,8 @@ required_columns = [
 ]
 
 # Функция для обработки одного файла
-def process_file(file_path, output_folder):
+def process_file(file_name, input_folder, output_folder):
+    file_path = os.path.join(input_folder, file_name)
     print(f"Обрабатывается файл: {file_path}")
     try:
         df = pd.read_excel(file_path)
@@ -33,8 +36,12 @@ def process_file(file_path, output_folder):
     df_filtered.to_excel(output_file_path, index=False)
     print(f"Результат сохранён в файл: {output_file_path}")
 
-# Обрабатываем все файлы в папке input_folder
-for file_name in os.listdir(input_folder):
-    if file_name.endswith(".xls") or file_name.endswith(".xlsx"):
-        file_path = os.path.join(input_folder, file_name)
-        process_file(file_path, output_folder)
+# Получаем список файлов для обработки
+file_list = [file_name for file_name in os.listdir(input_folder) if file_name.endswith((".xls", ".xlsx"))]
+
+# Используем multiprocessing для параллельной обработки файлов
+with ProcessPoolExecutor() as executor:
+    # partial позволяет передать дополнительные аргументы в функцию
+    func = partial(process_file, input_folder=input_folder, output_folder=output_folder)
+    # Отправляем задачи на исполнение в пул процессов
+    executor.map(func, file_list)

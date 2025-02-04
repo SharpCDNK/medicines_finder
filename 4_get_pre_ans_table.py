@@ -7,7 +7,7 @@ import numpy as np
 
 def process_competitor(competitor, analysis_dir, diff_comp_dir, output_dir):
     competitor_analysis_path = os.path.join(analysis_dir, competitor, f"{competitor}_list_for_analis.xlsx")
-    competitor_diff_path = os.path.join(diff_comp_dir, f"{competitor}")
+    competitor_diff_path = os.path.join(diff_comp_dir, competitor)
 
     if not os.path.exists(competitor_analysis_path) or not os.path.isdir(competitor_diff_path):
         print(f"Пропускаю {competitor}: отсутствуют необходимые файлы или папки.")
@@ -34,17 +34,20 @@ def process_competitor(competitor, analysis_dir, diff_comp_dir, output_dir):
     for diff_file in os.listdir(competitor_diff_path):
         if not diff_file.endswith(('.xls', '.xlsx')):
             continue
-        match = re.search(r"diff_parsed_data_(\d+)_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2})", diff_file)
+        # Обновлённое регулярное выражение для нового формата имён файлов
+        match = re.search(r"diff_(\d+)_parsed_data_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2})", diff_file)
         if match:
             index = int(match.group(1))
             date_time = match.group(2)
             diff_files.append((index, date_time, diff_file))
+        else:
+            print(f"Файл {diff_file} не соответствует ожидаемому шаблону и будет пропущен.")
 
     diff_files.sort(key=lambda x: x[0])
 
     for index, date_time, diff_file in diff_files:
         diff_file_path = os.path.join(competitor_diff_path, diff_file)
-        print(f"Читаю diff файл: {diff_file_path}")
+        print(f"\nЧитаю diff файл: {diff_file_path}")
 
         try:
             df = pd.read_excel(diff_file_path, dtype=str).fillna('')
@@ -52,14 +55,20 @@ def process_competitor(competitor, analysis_dir, diff_comp_dir, output_dir):
             print(f"Ошибка при чтении файла {diff_file_path}: {e}")
             continue
 
-        print("Колонки в файле:", df.columns.tolist())
+        # print(f"Колонки в файле {diff_file}: {df.columns.tolist()}")
 
         if 'key' not in df.columns:
             df['key'] = df.iloc[:, :6].agg('|'.join, axis=1)
 
         # Обработка названий колонок
-        price_column_name = df.columns[6]  # Замените на фактическое название колонки с ценой
-        quantity_column_name = df.columns[8]  # Замените на фактическое название колонки с количеством
+        # Замените на фактическое название колонок с ценой и количеством
+        price_column_name = 'price'          # Название колонки с ценой в файле
+        quantity_column_name = 'only_quantity'    # Название колонки с количеством в файле
+
+        # Проверка наличия колонок
+        if price_column_name not in df.columns or quantity_column_name not in df.columns:
+            print(f"В файле {diff_file} отсутствуют необходимые колонки '{price_column_name}' или '{quantity_column_name}'.")
+            continue
 
         quantity_info = df.set_index('key')[quantity_column_name].to_dict()
 
@@ -67,20 +76,23 @@ def process_competitor(competitor, analysis_dir, diff_comp_dir, output_dir):
         for idx, row in df.iterrows():
             key = row['key']
             price_str = str(row[price_column_name])
+            # print(f"Обработка строки {idx}: цена '{price_str}'")
 
             # Используем регулярное выражение для извлечения числовой части цены
-            match = re.search(r"(\d+[.,]?\d*)", price_str)
-            if match:
-                price_value = match.group(1)
-                price_value = price_value.replace(',', '.')
+            match_price = re.search(r"([\d\s]+[.,]?\d*)", price_str)
+            if match_price:
+                price_value = match_price.group(1)
+                # Удаляем пробелы и заменяем запятую на точку
+                price_value = price_value.replace(',', '.').replace(' ', '')
                 try:
                     price = float(price_value)
                     prices_dict[key].append(price)
-                except (ValueError, TypeError):
-                    print(f"Не удалось преобразовать цену в строке {idx}: {price_value}")
+                    # print(f"Добавлена цена для ключа '{key}': {price}")
+                except (ValueError, TypeError) as e:
+                    print(f"Не удалось преобразовать цену в строке {idx}: '{price_value}'. Ошибка: {e}")
                     continue
             else:
-                print(f"Не удалось найти число в цене в строке {idx}: {price_str}")
+                print(f"Не удалось найти число в цене в строке {idx}: '{price_str}'")
                 continue
 
         pre_ans[f"Количество {index}_{date_time}"] = pre_ans['key'].map(quantity_info).fillna("-")
@@ -107,7 +119,7 @@ def process_competitor(competitor, analysis_dir, diff_comp_dir, output_dir):
     pre_ans.drop(columns=['key'], inplace=True)
     output_file = os.path.join(output_dir, f"pre_ans_{competitor}.xlsx")
     pre_ans.to_excel(output_file, index=False)
-    print(f"pre_ans сохранен: {output_file}")
+    print(f"\npre_ans сохранен: {output_file}")
 
 def generate_pre_ans_table(analysis_dir, diff_comp_dir, output_dir):
     if not os.path.exists(analysis_dir):

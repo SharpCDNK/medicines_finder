@@ -1,18 +1,21 @@
 import pandas as pd
 import os
+from concurrent.futures import ProcessPoolExecutor
+from functools import partial
 
 input_folder = "Datasets/pre_ans"
 output_folder = "Datasets/pre_ans_sorted"
 
 os.makedirs(output_folder, exist_ok=True)
 
-def process_file(file_path):
+def process_file(file_name, input_folder, output_folder):
+    file_path = os.path.join(input_folder, file_name)
     print(f"Обрабатывается файл: {file_path}")
     try:
         df = pd.read_excel(file_path)
     except Exception as e:
         print(f"Ошибка при загрузке файла {file_path}: {e}")
-        return None
+        return
 
     print(df.head())
     print(f"Столбцы в файле: {df.columns}")
@@ -23,17 +26,16 @@ def process_file(file_path):
 
     if len(quantity_columns) < 2:
         print(f"Ошибка: недостаточно столбцов с количеством в файле {file_path}")
-        return None
+        return
 
     # Приводим данные количественных столбцов к числовому типу
     df[quantity_columns] = df[quantity_columns].apply(pd.to_numeric, errors='coerce')
 
     # Приводим столбцы с ценами к числовому типу
-    # Предполагаем, что у вас есть колонка "Медианная цена"
     price_column = "Медианная цена"
     if price_column not in df.columns:
         print(f"Ошибка: столбец '{price_column}' отсутствует в файле {file_path}")
-        return None
+        return
     print(f"Обрабатывается столбец с ценой: {price_column}")
 
     # Преобразуем столбец с ценой в числовой тип
@@ -72,16 +74,17 @@ def process_file(file_path):
     df_sorted = df_filtered.sort_values(by="Заработали", ascending=False)
     print(f"Первые строки после сортировки:\n{df_sorted.head()}")
 
-    return df_sorted
+    # Сохраняем результат в файл
+    output_file_path = os.path.join(output_folder, f"sorted_{file_name}")
+    df_sorted.to_excel(output_file_path, index=False)
+    print(f"Результат сохранён в файл: {output_file_path}")
 
-# Обработка всех файлов в input_folder
-for file_name in os.listdir(input_folder):
-    if file_name.endswith(".xls") or file_name.endswith(".xlsx"):
-        file_path = os.path.join(input_folder, file_name)
-        sorted_table = process_file(file_path)
-        if sorted_table is not None:
-            output_file_path = os.path.join(output_folder, f"sorted_{file_name}")
-            sorted_table.to_excel(output_file_path, index=False)
-            print(f"Результат сохранён в файл: {output_file_path}")
-        else:
-            print(f"Файл {file_name} пропущен из-за ошибок.")
+# Получаем список файлов для обработки
+file_list = [file_name for file_name in os.listdir(input_folder) if file_name.endswith((".xls", ".xlsx"))]
+
+if __name__ == "__main__":
+    with ProcessPoolExecutor() as executor:
+        # partial позволяет передать дополнительные аргументы в функцию
+        func = partial(process_file, input_folder=input_folder, output_folder=output_folder)
+        # Отправляем задачи на исполнение в пул процессов
+        executor.map(func, file_list)
