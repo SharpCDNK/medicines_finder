@@ -36,10 +36,17 @@ def process_competitor(competitor_name):
 
     # Получаем список файлов и сортируем по индексу
     files = [f for f in os.listdir(folder_path) if f.endswith(".xlsx") or f.endswith(".xls")]
-    files.sort(key=get_index_from_filename)
+    files_with_index = [f for f in files if get_index_from_filename(f) is not None]
+    files_with_index.sort(key=get_index_from_filename)
+
+    if not files_with_index:
+        no_files_message = f"Нет файлов для обработки в папке {folder_path} для конкурента '{competitor_name}'"
+        print(no_files_message)
+        logging.warning(no_files_message)
+        return
 
     # Проходимся по всем файлам в папке конкурента
-    for file_name in files:
+    for file_name in files_with_index:
         file_path = os.path.join(folder_path, file_name)
         try:
             # Читаем Excel файл
