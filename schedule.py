@@ -21,7 +21,7 @@ def job(cur_apteka, cur_apteka_link):
 def run_schedule(cur_apteka, cur_apteka_link):
     global stop_scheduler
     # Времена выполнения задач
-    task_times = ["09:20", "11:20", "13:20", "15:20", "17:20", "19:20", "21:20", "23:20"]
+    task_times = ["8:20", "10:20", "12:20","14:20", "16:20", "18:20", "20:20", "22:20", "23:30"]
 
     # Словарь для хранения времени последнего выполнения
     last_run_time = None
@@ -37,7 +37,7 @@ def run_schedule(cur_apteka, cur_apteka_link):
             # Ждем одну минуту, чтобы избежать повторного запуска в ту же минуту
             time.sleep(60)
         else:
-            os.system('clear')
+            os.system('cls')
             print("Аптека: ", cur_apteka, ", ссылка: ", cur_apteka_link)
             print({current_time}, "- текущее время.")
             time.sleep(4)
