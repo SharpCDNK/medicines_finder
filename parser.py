@@ -32,10 +32,16 @@ def parse_table(html_content):
         cols = row.find_all('td')
         if len(cols) < 5:
             continue
+
+        # Извлекаем данные из колонок
+        name_div = cols[0].find('a')
+        type_span = cols[0].find('span', class_='capture')
         price_div = cols[4].find(class_='price-value')
         quantity_div = cols[4].find(class_='capture')
+
         item = {
-            'name': cols[0].text.strip(),
+            'name': name_div.text.strip() if name_div else '',
+            'item_type': type_span.text.strip() if type_span else '',
             'form': cols[1].text.strip(),
             'producer': cols[2].text.strip(),
             'price': price_div.text.strip() if price_div else '',
@@ -45,7 +51,7 @@ def parse_table(html_content):
     return data
 
 def clean_single_item(item):
-    name_parts = item['name'].split('\n')
+    # Очищаем и структурируем данные
     form_parts = item['form'].split('\n')
     producer_parts = item['producer'].split('\n')
 
@@ -53,8 +59,8 @@ def clean_single_item(item):
     only_quantity = quantity_match.group(0) if quantity_match else ''
 
     cleaned_item = {
-        'name': name_parts[0].strip(),
-        'item_type': name_parts[-1].strip() if len(name_parts) > 1 else '',
+        'name': item['name'],
+        'item_type': item['item_type'],
         'item_form': form_parts[0].strip(),
         'prescription': form_parts[-1].strip() if len(form_parts) > 1 else '',
         'manufacturer': producer_parts[0].strip(),
