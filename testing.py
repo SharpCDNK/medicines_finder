@@ -34,30 +34,36 @@ def process_file(file_name, input_folder, output_folder):
     df[price_column] = df[price_column].str.extract(r'(\d+\.?\d*)', expand=False)
     df[price_column] = pd.to_numeric(df[price_column], errors='coerce').fillna(0)
 
-    # Функция для расчёта "Индекс изменений" и определения сегментов
-    def calculate_sold_and_segments(row):
+    # Функция для расчёта "Индекс изменений", "Коэффициент стабильности спроса" и определения сегментов
+    def calculate_metrics(row):
         sold = 0
         segments = []
         temp_segment = []
         prev_val = None
-
         segment_numbers = []
+        demand_changes = []
 
         for idx, col in enumerate(quantity_columns):
             curr_val = row[col]
             if pd.isnull(curr_val):
                 curr_val = 0
 
-            # Расчет проданного
-            if prev_val is not None and curr_val < prev_val:
-                sold += prev_val - curr_val
-
-            # Определение сегментов
+            # Расчёт изменившегося количества
             if prev_val is not None:
-                if curr_val > prev_val:
+                change = curr_val - prev_val
+                demand_changes.append(change)
+                if change < 0:
+                    sold += -change  # Увеличиваем проданное на уменьшение количества
+
+                # Определение сегментов
+                if change > 0:
                     if temp_segment:
                         segments.append(temp_segment)
                     temp_segment = []
+
+            else:
+                demand_changes.append(0)  # Для первого значения изменений нет
+
             temp_segment.append(curr_val)
             prev_val = curr_val
             segment_numbers.append(len(segments) + 1)
@@ -65,19 +71,36 @@ def process_file(file_name, input_folder, output_folder):
         if temp_segment:
             segments.append(temp_segment)
 
+        # Расчёт коэффициента стабильности спроса
+        if len(demand_changes) > 1:
+            variance = pd.Series(demand_changes[1:]).var()  # Исключаем первое изменение (0)
+            if variance != 0:
+                stability_coefficient = 1 / variance
+            else:
+                stability_coefficient = float('inf')  # Если дисперсия 0, стабильность максимальна
+        else:
+            stability_coefficient = 0  # Недостаточно данных для расчёта
+
         return pd.Series({
             "Индекс изменений": sold,
             "Сегменты": len(segments),
+            "Коэффициент стабильности спроса": stability_coefficient,
             "Номера сегментов": segment_numbers
         })
 
     # Применение функции к DataFrame
-    segment_results = df.apply(calculate_sold_and_segments, axis=1)
-    df["Индекс изменений"] = segment_results["Индекс изменений"]
-    df["Сегменты"] = segment_results["Сегменты"]
-    segment_numbers_list = segment_results["Номера сегментов"].tolist()
+    metrics_results = df.apply(calculate_metrics, axis=1)
+    df["Индекс изменений"] = metrics_results["Индекс изменений"]
+    df["Сегменты"] = metrics_results["Сегменты"]
+    df["Коэффициент стабильности спроса"] = metrics_results["Коэффициент стабильности спроса"]
+    segment_numbers_list = metrics_results["Номера сегментов"].tolist()
 
-    # Расчёт КПС Коэффициент Плавного Спроса
+    # Добавление колонки с расчётом коэффициента стабильности спроса
+    df["Расчёт коэффициента стабильности"] = df["Коэффициент стабильности спроса"].apply(
+        lambda x: f"1 / variance" if x != float('inf') else "1 / 0"
+    )
+
+    # Расчёт КПС (Коэффициент Плавного Спроса)
     df["КПС коэффициент плавного спроса"] = df["Индекс изменений"] / df["Сегменты"]
     df["КПС коэффициент плавного спроса"] = df["КПС коэффициент плавного спроса"].fillna(0)
 
@@ -93,13 +116,13 @@ def process_file(file_name, input_folder, output_folder):
     # Сохранение результата с выделением ячеек
     output_file_path = os.path.join(output_folder, f"sorted_{file_name}")
 
-    # Создаем объект ExcelWriter с использованием openpyxl
+    # Создаём объект ExcelWriter с использованием openpyxl
     with pd.ExcelWriter(output_file_path, engine='openpyxl') as writer:
         df_filtered.to_excel(writer, index=False, sheet_name='Sheet1')
         workbook = writer.book
         worksheet = writer.sheets['Sheet1']
 
-        # Определяем заливку желтым цветом
+        # Определяем заливку жёлтым цветом
         yellow_fill = PatternFill(start_color='FFFF00', end_color='FFFF00', fill_type='solid')
 
         # Получение индексов столбцов для количества
@@ -114,7 +137,7 @@ def process_file(file_name, input_folder, output_folder):
                         cell = worksheet.cell(row=row_idx, column=col_idx)
                         cell.fill = yellow_fill
                 else:
-                    # Проверяем первую ячейку в строке
+                    # Выделяем первую ячейку в строке
                     cell = worksheet.cell(row=row_idx, column=col_idx)
                     cell.fill = yellow_fill
 
