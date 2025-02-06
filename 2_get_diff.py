@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import multiprocessing
 
-def process_competitor(competitor, apteka_items, competitors_dir, output_dir, total_files, processed_count):
+def process_competitor(competitor, apteka_items, competitors_dir, output_dir, total_files, processed_count, lock):
     competitor_path = os.path.join(competitors_dir, competitor)
     if not os.path.isdir(competitor_path):
         return
@@ -12,16 +12,22 @@ def process_competitor(competitor, apteka_items, competitors_dir, output_dir, to
 
     supported_extensions = ('.xls', '.xlsx', '.xlsm')
 
-    # Sorting files by index extracted from filenames
+    # Сортируем файлы по индексу, извлечённому из названий
     files = sorted(
         [f for f in os.listdir(competitor_path) if f.endswith(supported_extensions)],
-        key=lambda x: int(x.split('_')[0])
+        key=lambda x: int(x.split('_')[0]) if x.split('_')[0].isdigit() else 0
     )
 
     for file in files:
         file_path = os.path.join(competitor_path, file)
         try:
-            df = pd.read_excel(file_path, dtype=str).dropna()
+            # Определяем движок для чтения Excel-файла
+            if file.endswith('.xls'):
+                engine = 'xlrd'
+            else:
+                engine = 'openpyxl'
+
+            df = pd.read_excel(file_path, dtype=str, engine=engine).dropna()
             competitor_items = set(df.iloc[:, 0].tolist())
 
             diff_items = competitor_items - apteka_items
@@ -34,18 +40,21 @@ def process_competitor(competitor, apteka_items, competitors_dir, output_dir, to
         except Exception as e:
             print(f"Ошибка обработки файла {file_path}: {e}")
         finally:
-            # Directly incrementing the processed_count
-            processed_count.value += 1
+            # Обновляем счётчик с использованием блокировки
+            with lock:
+                processed_count.value += 1
             print(f"Загружено {processed_count.value} из {total_files} файлов")
 
 def find_differences(apteka_file, competitors_dir, output_dir):
     try:
-        if apteka_file.endswith(('.xls', '.xlsx', '.xlsm')):
-            apteka_df = pd.read_excel(apteka_file, usecols=[0], dtype=str).dropna()
-            apteka_items = set(apteka_df.iloc[:, 0].tolist())
+        # Определяем движок для файла аптеки
+        if apteka_file.endswith('.xls'):
+            engine = 'xlrd'
         else:
-            print(f"Неподдерживаемый формат файла аптеки: {apteka_file}")
-            return
+            engine = 'openpyxl'
+
+        apteka_df = pd.read_excel(apteka_file, usecols=[0], dtype=str, engine=engine).dropna()
+        apteka_items = set(apteka_df.iloc[:, 0].tolist())
     except Exception as e:
         print(f"Ошибка при загрузке файла аптеки: {e}")
         return
@@ -56,7 +65,7 @@ def find_differences(apteka_file, competitors_dir, output_dir):
         if os.path.isdir(os.path.join(competitors_dir, comp))
     ]
 
-    # Calculating the total number of files to process
+    # Подсчитываем общее количество файлов для обработки
     total_files = sum(
         len([
             f for f in os.listdir(os.path.join(competitors_dir, comp))
@@ -66,14 +75,17 @@ def find_differences(apteka_file, competitors_dir, output_dir):
 
     with multiprocessing.Manager() as manager:
         processed_count = manager.Value('i', 0)
+        lock = manager.Lock()  # Создаём блокировку
+
         pool_args = [
-            (comp, apteka_items, competitors_dir, output_dir, total_files, processed_count)
+            (comp, apteka_items, competitors_dir, output_dir, total_files, processed_count, lock)
             for comp in competitors
         ]
         with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
             pool.starmap(process_competitor, pool_args)
 
-apteka_file_path = input('My_apteka_path:')
+
+apteka_file_path = input('Путь к файлу аптеки:')
 competitors_directory = "Datasets/data/comp"
 output_directory = "Datasets/diff_comp"
 
