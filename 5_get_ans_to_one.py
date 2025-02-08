@@ -34,7 +34,7 @@ def process_file(file_name, input_folder, output_folder):
     df[price_column] = df[price_column].str.extract(r'(\d+\.?\d*)', expand=False)
     df[price_column] = pd.to_numeric(df[price_column], errors='coerce').fillna(0)
 
-    # Функция для расчёта "Индекс изменений", "Коэффициент стабильности спроса" и определения сегментов
+    # Функция для расчёта необходимых метрик
     def calculate_metrics(row):
         sold = 0
         segments = []
@@ -42,6 +42,7 @@ def process_file(file_name, input_folder, output_folder):
         prev_val = None
         segment_numbers = []
         demand_changes = []
+        negative_changes = 0  # Инициализируем счетчик уменьшений
 
         for idx, col in enumerate(quantity_columns):
             curr_val = row[col]
@@ -54,13 +55,13 @@ def process_file(file_name, input_folder, output_folder):
                 demand_changes.append(change)
                 if change < 0:
                     sold += -change  # Увеличиваем проданное на уменьшение количества
+                    negative_changes += 1  # Увеличиваем счетчик при уменьшении количества
 
                 # Определение сегментов
                 if change > 0:
                     if temp_segment:
                         segments.append(temp_segment)
                     temp_segment = []
-
             else:
                 demand_changes.append(0)  # Для первого значения изменений нет
 
@@ -71,47 +72,34 @@ def process_file(file_name, input_folder, output_folder):
         if temp_segment:
             segments.append(temp_segment)
 
-        # Расчёт коэффициента стабильности спроса
-        if len(demand_changes) > 1:
-            variance = pd.Series(demand_changes[1:]).var()  # Исключаем первое изменение (0)
-            if variance != 0:
-                stability_coefficient = 1 / variance
-            else:
-                stability_coefficient = float('inf')  # Если дисперсия 0, стабильность максимальна
-        else:
-            stability_coefficient = 0  # Недостаточно данных для расчёта
-
         return pd.Series({
             "Индекс изменений": sold,
             "Сегменты": len(segments),
-            "Коэффициент стабильности спроса": stability_coefficient,
-            "Номера сегментов": segment_numbers
+            "Номера сегментов": segment_numbers,
+            "Частота изменений в минус": negative_changes  # Добавляем частоту уменьшений
         })
 
     # Применение функции к DataFrame
     metrics_results = df.apply(calculate_metrics, axis=1)
     df["Индекс изменений"] = metrics_results["Индекс изменений"]
     df["Сегменты"] = metrics_results["Сегменты"]
-    df["Коэффициент стабильности спроса"] = metrics_results["Коэффициент стабильности спроса"]
+    df["Частота изменений в минус"] = metrics_results["Частота изменений в минус"]
     segment_numbers_list = metrics_results["Номера сегментов"].tolist()
-
-    # Добавление колонки с расчётом коэффициента стабильности спроса
-    df["Расчёт коэффициента стабильности"] = df["Коэффициент стабильности спроса"].apply(
-        lambda x: f"1 / variance" if x != float('inf') else "1 / 0"
-    )
-
-    # Расчёт КПС (Коэффициент Плавного Спроса)
-    df["КПС коэффициент плавного спроса"] = df["Индекс изменений"] / df["Сегменты"]
-    df["КПС коэффициент плавного спроса"] = df["КПС коэффициент плавного спроса"].fillna(0)
-
-    # Добавление колонки с расчётом КПС
-    df["Расчёт КПС"] = df["Индекс изменений"].astype(str) + " / " + df["Сегменты"].astype(str)
 
     # Расчёт заработка
     df["Заработали"] = df["Индекс изменений"] * df[price_column]
 
     # Фильтрация и сортировка данных
     df_filtered = df[df["Индекс изменений"] > 0].sort_values(by="Заработали", ascending=False)
+
+    # Удаление указанных колонок перед сохранением
+    columns_to_remove = [
+        'Коэффициент стабильности спроса',
+        'Расчёт коэффициента стабильности',
+        'КПС коэффициент плавного спроса',
+        'Расчёт КПС'
+    ]
+    df_filtered = df_filtered.drop(columns=[col for col in columns_to_remove if col in df_filtered.columns])
 
     # Сохранение результата с выделением ячеек
     output_file_path = os.path.join(output_folder, f"sorted_{file_name}")
@@ -126,7 +114,7 @@ def process_file(file_name, input_folder, output_folder):
         yellow_fill = PatternFill(start_color='FFFF00', end_color='FFFF00', fill_type='solid')
 
         # Получение индексов столбцов для количества
-        quantity_col_indices = [df_filtered.columns.get_loc(col) + 1 for col in quantity_columns]
+        quantity_col_indices = [df_filtered.columns.get_loc(col) + 1 for col in quantity_columns if col in df_filtered.columns]
 
         # Применение заливки к ячейкам, где сегмент меняется
         for row_idx, row in enumerate(df_filtered.itertuples(), start=2):  # Начинаем с 2, чтобы пропустить заголовок
@@ -149,7 +137,6 @@ os.makedirs(output_folder, exist_ok=True)
 
 file_list = [file_name for file_name in os.listdir(input_folder) if file_name.endswith((".xls", ".xlsx"))]
 
-if __name__ == "__main__":
-    with ProcessPoolExecutor() as executor:
-        func = partial(process_file, input_folder=input_folder, output_folder=output_folder)
-        executor.map(func, file_list)
+with ProcessPoolExecutor() as executor:
+    func = partial(process_file, input_folder=input_folder, output_folder=output_folder)
+    executor.map(func, file_list)
