@@ -38,6 +38,41 @@ def parse_table(html_content):
         type_span = cols[0].find('span', class_='capture')
         price_div = cols[4].find(class_='price-value')
         quantity_div = cols[4].find(class_='capture')
+        quantity_text = quantity_div.text.strip() if quantity_div else ''
+
+        # Инициализируем переменные
+        total_quantity = ''
+        only_quantity = ''
+
+        if 'от' in quantity_text.lower():
+            # Обрабатываем случай с "от" и парсим tooltip
+            tooltip_body = cols[4].find('div', class_='tooltip-info-body')
+            if tooltip_body:
+                total_quantity_value = 0.0
+                quantities = tooltip_body.find_all('div', class_='tooltip-info-table-tr')
+                for q in quantities:
+                    tds = q.find_all('div', class_='tooltip-info-table-td')
+                    if len(tds) >= 2:
+                        quantity_str = tds[1].text.strip()
+                        match = re.search(r'([\d\.,]+)', quantity_str)
+                        if match:
+                            # Преобразуем число с учётом возможной запятой
+                            num_str = match.group(1).replace(',', '.')
+                            total_quantity_value += float(num_str)
+                total_quantity = f"{total_quantity_value} упаковок"
+                only_quantity = str(total_quantity_value)
+            else:
+                total_quantity = 'Не удалось получить количество'
+                only_quantity = ''
+        else:
+            # Извлекаем количество как обычно
+            total_quantity = quantity_text
+            quantity_match = re.search(r'[\d\.,]+', total_quantity)
+            if quantity_match:
+                num_str = quantity_match.group(0).replace(',', '.')
+                only_quantity = num_str
+            else:
+                only_quantity = ''
 
         item = {
             'name': name_div.text.strip() if name_div else '',
@@ -45,7 +80,8 @@ def parse_table(html_content):
             'form': cols[1].text.strip(),
             'producer': cols[2].text.strip(),
             'price': price_div.text.strip() if price_div else '',
-            'quantity': quantity_div.text.strip() if quantity_div else ''
+            'quantity': total_quantity,
+            'only_quantity': only_quantity
         }
         data.append(item)
     return data
@@ -54,9 +90,6 @@ def clean_single_item(item):
     # Очищаем и структурируем данные
     form_parts = item['form'].split('\n')
     producer_parts = item['producer'].split('\n')
-
-    quantity_match = re.search(r'\d+\.?\d*', item['quantity'])
-    only_quantity = quantity_match.group(0) if quantity_match else ''
 
     cleaned_item = {
         'name': item['name'],
@@ -67,7 +100,7 @@ def clean_single_item(item):
         'country': producer_parts[-1].strip() if len(producer_parts) > 1 else '',
         'price': item['price'],
         'quantity': item['quantity'],
-        'only_quantity': only_quantity
+        'only_quantity': item['only_quantity']
     }
     return cleaned_item
 
@@ -97,7 +130,7 @@ async def get_total_positions(session, url):
                 label = label_div.find('label')
                 if label:
                     text = label.get_text(strip=True)
-                    match = re.search(r'Найдено позиций в продаже - (\d+)', text)
+                    match = re.search(r'Найдено позиций в продаже\s*-\s*(\d+)', text)
                     if match:
                         total_positions = int(match.group(1))
                         return total_positions

@@ -152,7 +152,7 @@ def check_and_correct_values(df):
                     if future_value == prev_value:
                         # Исправляем значения между текущим шагом и найденным будущим шагом
                         for correction_index in range(t, future_index):
-                            correction_col = quantity_columns[correction_index]
+                            cor rection_col = quantity_columns[correction_index]
                             df.at[idx, correction_col] = prev_value
                             # Записываем координаты исправленной ячейки
                             col_idx = df.columns.get_loc(correction_col)
@@ -173,20 +173,14 @@ def generate_pre_ans_table(analysis_dir, diff_comp_dir, output_dir, enable_corre
 
     competitors = [comp for comp in os.listdir(analysis_dir) if os.path.isdir(os.path.join(analysis_dir, comp))]
 
-    # Для отладки можно временно отключить multiprocessing
-    # for comp in competitors:
-    #     process_competitor(comp, analysis_dir, diff_comp_dir, output_dir, enable_correction)
-
     with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
         pool.starmap(process_competitor, [(comp, analysis_dir, diff_comp_dir, output_dir, enable_correction) for comp in competitors])
 
-# Пример использования
-if __name__ == "__main__":
-    analysis_directory = "Datasets/list_for_analis"
-    comparison_directory = "Datasets/diff_comp"
-    output_directory = "Datasets/pre_ans"
 
-    # Установите enable_correction в True или False в зависимости от того, хотите ли вы включить исправление данных
-    enable_correction = True  # Или False, если нужно отключить исправление
+analysis_directory = "Datasets/list_for_analis"
+comparison_directory = "Datasets/diff_comp"
+output_directory = "Datasets/pre_ans"
 
-    generate_pre_ans_table(analysis_directory, comparison_directory, output_directory, enable_correction=enable_correction)
+enable_correction = True
+
+generate_pre_ans_table(analysis_directory, comparison_directory, output_directory, enable_correction=enable_correction)
