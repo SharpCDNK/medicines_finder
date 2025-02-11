@@ -6,6 +6,8 @@ import re
 import os
 from bs4 import BeautifulSoup
 from datetime import datetime
+import ssl
+import certifi
 
 async def fetch_page(session, url, page):
     try:
@@ -146,7 +148,10 @@ async def get_total_positions(session, url):
         return None
 
 async def get_all_pages(url, file_name):
-    async with aiohttp.ClientSession() as session:
+    # Создаем SSL-контекст с корректными сертификатами
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
         total_positions = await get_total_positions(session, url)
         if not total_positions:
             print("Не удалось получить общее количество позиций.")
@@ -172,7 +177,7 @@ async def get_all_pages(url, file_name):
             print(f"Страница {page}/{total_pages} обработана и данные сохранены.")
 
             page += 1
-            await asyncio.sleep(random.uniform(0.5,1.5))  # Небольшая пауза между запросами
+            await asyncio.sleep(random.uniform(0.5, 1.5))  # Небольшая пауза между запросами
 
 def get_next_file_index(path_to_save, base_filename):
     existing_files = os.listdir(path_to_save)
