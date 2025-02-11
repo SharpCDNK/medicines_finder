@@ -176,7 +176,7 @@ async def get_all_pages(url, file_name):
 
             # Выводим прогресс
             print(f"Страница {page}/{total_pages} обработана и данные сохранены.")
-
+            os.system('clear')
             page += 1
             await asyncio.sleep(random.uniform(0.5, 1.5))  # Небольшая пауза между запросами
 
