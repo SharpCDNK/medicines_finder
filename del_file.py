@@ -35,7 +35,7 @@ def delete_files_by_name(base_path, target_filename):
 
 
 # Базовая папка
-base_path = "Datasets/data/comp"
+base_path = "Datasets/competitors"
 
 # Запрашиваем у пользователя название файла для удаления
 target_filename = input("Введите название файла, который нужно удалить: ")
