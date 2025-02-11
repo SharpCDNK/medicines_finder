@@ -172,7 +172,7 @@ async def get_all_pages(url, file_name):
             print(f"Страница {page}/{total_pages} обработана и данные сохранены.")
 
             page += 1
-            await asyncio.sleep(random.uniform(0.2,0.2))  # Небольшая пауза между запросами
+            await asyncio.sleep(random.uniform(0.5,1.5))  # Небольшая пауза между запросами
 
 def get_next_file_index(path_to_save, base_filename):
     existing_files = os.listdir(path_to_save)

@@ -37,7 +37,7 @@ for entry in data:
             subprocess.Popen(command, shell=True)
         else:
             # Для Linux
-            subprocess.Popen(['gnome-terminal', '--', 'python', 'main.py', name, url])  # Для Linux
+            subprocess.Popen(['gnome-terminal', '--', 'python3', 'main.py', name, url])  # Для Linux
             # Для macOS
             # subprocess.Popen(['osascript', '-e', f'tell application "Terminal" to do script "python main.py {name} {url}"'])
     else:

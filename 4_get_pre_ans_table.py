@@ -152,7 +152,7 @@ def check_and_correct_values(df):
                     if future_value == prev_value:
                         # Исправляем значения между текущим шагом и найденным будущим шагом
                         for correction_index in range(t, future_index):
-                            cor rection_col = quantity_columns[correction_index]
+                            correction_col = quantity_columns[correction_index]
                             df.at[idx, correction_col] = prev_value
                             # Записываем координаты исправленной ячейки
                             col_idx = df.columns.get_loc(correction_col)
