@@ -49,16 +49,21 @@ def parse_table(html_content):
             tooltip_body = cols[4].find('div', class_='tooltip-info-body')
             if tooltip_body:
                 total_quantity_value = 0.0
+                # Находим все строки с информацией о количестве
                 quantities = tooltip_body.find_all('div', class_='tooltip-info-table-tr')
                 for q in quantities:
                     tds = q.find_all('div', class_='tooltip-info-table-td')
                     if len(tds) >= 2:
                         quantity_str = tds[1].text.strip()
+                        # Извлекаем число с учетом дробных значений
                         match = re.search(r'([\d\.,]+)', quantity_str)
                         if match:
-                            # Преобразуем число с учётом возможной запятой
                             num_str = match.group(1).replace(',', '.')
-                            total_quantity_value += float(num_str)
+                            try:
+                                quantity = float(num_str)
+                                total_quantity_value += quantity
+                            except ValueError:
+                                continue  # Пропускаем, если не число
                 total_quantity = f"{total_quantity_value} упаковок"
                 only_quantity = str(total_quantity_value)
             else:
@@ -67,9 +72,9 @@ def parse_table(html_content):
         else:
             # Извлекаем количество как обычно
             total_quantity = quantity_text
-            quantity_match = re.search(r'[\d\.,]+', total_quantity)
+            quantity_match = re.search(r'([\d\.,]+)', total_quantity)
             if quantity_match:
-                num_str = quantity_match.group(0).replace(',', '.')
+                num_str = quantity_match.group(1).replace(',', '.')
                 only_quantity = num_str
             else:
                 only_quantity = ''
@@ -163,16 +168,11 @@ async def get_all_pages(url, file_name):
             cleaned_data = [clean_single_item(item) for item in page_data]
             save_to_csv(cleaned_data, file_name)
 
-            # Очистка консоли в зависимости от операционной системы
-            if os.name == 'nt':
-                os.system('cls')  # Для Windows
-            else:
-                os.system('clear')  # Для Ubuntu/Linux/MacOS
-
+            # Выводим прогресс
             print(f"Страница {page}/{total_pages} обработана и данные сохранены.")
 
             page += 1
-            await asyncio.sleep(random.uniform(0.5, 1.5))  # Небольшая пауза между запросами
+            await asyncio.sleep(random.uniform(0.2,0.2))  # Небольшая пауза между запросами
 
 def get_next_file_index(path_to_save, base_filename):
     existing_files = os.listdir(path_to_save)

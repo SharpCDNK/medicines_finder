@@ -47,11 +47,13 @@ def process_file(args):
 
 
 def process_and_move_files(source_folder, target_folder):
+
     """
     Перемещает все файлы из source_folder в target_folder,
     сохраняя структуру папок. Если файл имеет расширение .csv,
     преобразует его в .xlsx при перемещении.
     """
+
     file_paths = []
     for root, _, files in os.walk(source_folder):
         for file in files:
