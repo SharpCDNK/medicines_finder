@@ -7,7 +7,6 @@ import os
 from bs4 import BeautifulSoup
 from datetime import datetime
 import ssl
-import certifi
 
 async def fetch_page(session, url, page):
     try:
@@ -148,8 +147,10 @@ async def get_total_positions(session, url):
         return None
 
 async def get_all_pages(url, file_name):
-    # Создаем SSL-контекст с корректными сертификатами
-    ssl_context = ssl.create_default_context(cafile=certifi.where())
+    # Создаем SSL-контекст
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
 
     async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
         total_positions = await get_total_positions(session, url)
