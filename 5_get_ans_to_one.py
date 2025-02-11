@@ -8,7 +8,7 @@ from openpyxl import Workbook
 import plotly.graph_objects as go
 
 # Функция для обработки отдельного файла
-def process_file(file_name, input_folder, output_folder, graphs_dir):
+def process_file(file_name, input_folder, output_folder, graphs_dir, hide_quantity_columns=False):
     file_path = os.path.join(input_folder, file_name)
     print(f"Обрабатывается файл: {file_path}")
     try:
@@ -43,8 +43,7 @@ def process_file(file_name, input_folder, output_folder, graphs_dir):
         segments = []
         temp_segment = []
         prev_val = None
-        segment_numbers = []
-        demand_changes = []
+        segment_change_indices = []
         negative_changes = 0
 
         for idx, col in enumerate(quantity_columns):
@@ -53,20 +52,16 @@ def process_file(file_name, input_folder, output_folder, graphs_dir):
                 curr_val = 0
             if prev_val is not None:
                 change = curr_val - prev_val
-                demand_changes.append(change)
                 if change < 0:
                     sold += -change
                     negative_changes += 1
                 if change > 0:
                     if temp_segment:
                         segments.append(temp_segment)
+                        segment_change_indices.append(idx)
                     temp_segment = []
-            else:
-                demand_changes.append(0)
-
             temp_segment.append(curr_val)
             prev_val = curr_val
-            segment_numbers.append(len(segments) + 1)
 
         if temp_segment:
             segments.append(temp_segment)
@@ -75,7 +70,7 @@ def process_file(file_name, input_folder, output_folder, graphs_dir):
             "Индекс изменений": sold,
             "Сегменты": len(segments),
             "Частота изменений в минус": negative_changes,
-            "Номера сегментов": segment_numbers
+            "Индексы смены сегментов": segment_change_indices
         })
 
     # Применение функции
@@ -83,7 +78,7 @@ def process_file(file_name, input_folder, output_folder, graphs_dir):
     df["Индекс изменений"] = metrics_results["Индекс изменений"]
     df["Сегменты"] = metrics_results["Сегменты"]
     df["Частота изменений в минус"] = metrics_results["Частота изменений в минус"]
-    segment_numbers_list = metrics_results["Номера сегментов"].tolist()
+    segment_change_indices_list = metrics_results["Индексы смены сегментов"]
 
     # Расчёт заработка
     df["Заработали"] = df["Индекс изменений"] * df[price_column]
@@ -107,23 +102,24 @@ def process_file(file_name, input_folder, output_folder, graphs_dir):
     # Создаём заливку для нового сегмента
     yellow_fill = PatternFill(start_color='FFFF00', end_color='FFFF00', fill_type='solid')
 
-    # Генерация графиков
+    # Генерация графиков и подсветка сегментов
     for index, row in df_filtered.iterrows():
         quantity_values = row[quantity_columns].values
-        segment_numbers = segment_numbers_list[row.name]
+        segment_change_indices = segment_change_indices_list.loc[row.name]
 
         # Исключаем повышения количества для графика
         reduced_quantity_values = []
-        segment_change_indices = []  # Индексы, где начинаются новые сегменты
-        for i in range(len(quantity_values)):
-            if i == 0 or quantity_values[i] <= quantity_values[i - 1]:
-                reduced_quantity_values.append(quantity_values[i])
-            else:
-                reduced_quantity_values.append(quantity_values[i - 1])
+        prev_val = None
 
-            # Добавляем индекс, если сегмент изменился
-            if i > 0 and segment_numbers[i] != segment_numbers[i - 1]:
-                segment_change_indices.append(i)
+        for curr_val in quantity_values:
+            if prev_val is not None:
+                if curr_val <= prev_val:
+                    reduced_quantity_values.append(curr_val)
+                else:
+                    reduced_quantity_values.append(prev_val)
+            else:
+                reduced_quantity_values.append(curr_val)
+            prev_val = curr_val
 
         if len(set(reduced_quantity_values)) > 1:
             formatted_dates = []
@@ -160,10 +156,10 @@ def process_file(file_name, input_folder, output_folder, graphs_dir):
 
             # Добавляем маркеры для новых сегментов
             for idx in segment_change_indices:
-                if idx < len(formatted_dates):
+                if idx < len(plot_df):
                     fig.add_trace(go.Scatter(
-                        x=[formatted_dates[idx]],
-                        y=[reduced_quantity_values[idx]],
+                        x=[plot_df['Дата и время'].iloc[idx]],
+                        y=[plot_df['Количество'].iloc[idx]],
                         mode='markers',
                         marker=dict(size=10, color='yellow'),
                         name='Новый сегмент'
@@ -187,27 +183,30 @@ def process_file(file_name, input_folder, output_folder, graphs_dir):
             link = '=HYPERLINK("{}", "{}")'.format(relative_graph_path, "Показать")
             df_filtered.at[index, "Ссылка на график"] = link
 
-    # Сохранение Excel с графиками и выделением сегментов
+    # Сохраняем Excel-файл с подсветкой новых сегментов
     with pd.ExcelWriter(output_file_path, engine='openpyxl') as writer:
         df_filtered.to_excel(writer, index=False, sheet_name='Data')
         workbook = writer.book
         worksheet = writer.sheets['Data']
 
-        # Заливка ячеек, где начинаются новые сегменты
+        # Получаем индексы столбцов с количеством
         quantity_col_indices = [df_filtered.columns.get_loc(col) + 1 for col in quantity_columns if col in df_filtered.columns]
+
         for row_idx, row in enumerate(df_filtered.itertuples(), start=2):
-            segment_numbers = segment_numbers_list[row.Index]
-            for idx, col_idx in enumerate(quantity_col_indices):
-                if idx > 0:
-                    if segment_numbers[idx] != segment_numbers[idx - 1]:
-                        cell = worksheet.cell(row=row_idx, column=col_idx)
-                        cell.fill = yellow_fill
-                else:
+            segment_change_indices = segment_change_indices_list.loc[row.Index]
+            for idx in segment_change_indices:
+                if idx < len(quantity_col_indices):
+                    col_idx = quantity_col_indices[idx]
                     cell = worksheet.cell(row=row_idx, column=col_idx)
                     cell.fill = yellow_fill
 
-    print(f"Результат сохранён: {output_file_path}")
+        # Если необходимо скрыть столбцы с количеством
+        if hide_quantity_columns:
+            for col_idx in quantity_col_indices:
+                col_letter = worksheet.cell(row=1, column=col_idx).column_letter
+                worksheet.column_dimensions[col_letter].hidden = True
 
+    print(f"Результат сохранён: {output_file_path}")
 
 # Основной скрипт
 input_folder = "Datasets/pre_ans"
@@ -219,7 +218,8 @@ os.makedirs(graphs_dir, exist_ok=True)
 file_list = [file_name for file_name in os.listdir(input_folder) if file_name.endswith((".xls", ".xlsx"))]
 
 with ProcessPoolExecutor() as executor:
-    func = partial(process_file, input_folder=input_folder, output_folder=output_folder, graphs_dir=graphs_dir)
+    func = partial(process_file, input_folder=input_folder, output_folder=output_folder,
+                   graphs_dir=graphs_dir, hide_quantity_columns=True)  # Устанавливаем флаг в True
     executor.map(func, file_list)
 
 print(f"Все файлы обработаны. Результаты сохранены в папке: {output_folder}")
