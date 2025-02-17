@@ -2,13 +2,15 @@ import subprocess
 import sys
 import platform
 
-
 # Функция для чтения данных из файла
 def read_data(file_path):
-    with open(file_path, 'r') as file:
-        lines = file.readlines()
-    return [line.strip().split() for line in lines if line.strip()]
-
+    try:
+        with open(file_path, 'r') as file:
+            lines = file.readlines()
+        return [line.strip().split() for line in lines if line.strip()]
+    except FileNotFoundError:
+        print(f'Ошибка: файл {file_path} не найден.')
+        sys.exit(1)
 
 # Путь к файлу с данными
 file_path = 'data.txt'  # Укажите путь к вашему файлу
@@ -23,13 +25,20 @@ for entry in data:
         print(f'Запуск main.py с аргументами: {name} {url}')
 
         # Определяем операционную систему
+        import subprocess
+        import platform
+
+        import subprocess
+        import platform
+
         if platform.system() == 'Windows':
             # Для Windows
-            subprocess.Popen(['python', 'main.py', name, url], creationflags=subprocess.CREATE_NEW_CONSOLE)
+            command = f'powershell -NoExit -Command "Start-Process powershell -ArgumentList \'-NoExit -Command \"python main.py \\\'{name}\\\' \\\'{url}\\\'\"\'"'
+            subprocess.Popen(command, shell=True)
         else:
-            # Для Linux/macOS
-            subprocess.Popen(['gnome-terminal', '--', 'python', 'main.py', name, url])  # Для Linux
-            # или
-            # subprocess.Popen(['osascript', '-e', f'tell application "Terminal" to do script "python main.py {name} {url}"'])  # Для macOS
+            # Для Linux
+            subprocess.Popen(['gnome-terminal', '--', 'python3', 'main.py', name, url])  # Для Linux
+            # Для macOS
+            # subprocess.Popen(['osascript', '-e', f'tell application "Terminal" to do script "python main.py {name} {url}"'])
     else:
         print(f'Пропущена строка: {entry} - неверный формат')

@@ -4,47 +4,54 @@ import logging
 import re
 import multiprocessing
 
-# Настройка логирования
-logging.basicConfig(
-    filename='Datasets/list_for_analis/log.txt',  # Путь к файлу логов
-    level=logging.INFO,  # Уровень логирования
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-
 # Путь к папке с конкурентами
 base_path = "Datasets/diff_comp"
 output_path = "Datasets/list_for_analis"
 
-# Проверяем, существует ли папка для сохранения результатов, если нет — создаем
+# Проверяем, существует ли папка для сохранения результатов, если нет — создаем её
 if not os.path.exists(output_path):
     os.makedirs(output_path)
 
+# Путь к файлу логов
+log_file_path = os.path.join(output_path, 'log.txt')
+
+# Настройка логирования
+logging.basicConfig(
+    filename=log_file_path,  # Путь к файлу логов
+    level=logging.INFO,      # Уровень логирования
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
 # Функция для получения индекса из имени файла
 def get_index_from_filename(file_name):
-    match = re.search(r'diff_parsed_data_(\d+)_', file_name)
+    match = re.match(r'diff_(\d+)_', file_name)
     return int(match.group(1)) if match else None
-
 
 # Функция для обработки одного конкурента
 def process_competitor(competitor_name):
     folder_path = os.path.join(base_path, competitor_name)
-    # Список для хранения данных
     all_data = []
     unique_records = set()  # Множество для проверки уникальности строк по первым 6 колонкам
 
     # Получаем список файлов и сортируем по индексу
-    files = [f for f in os.listdir(folder_path) if f.endswith(".xlsx") or f.endswith(".xls")]
-    files.sort(key=get_index_from_filename)
+    files = [f for f in os.listdir(folder_path) if f.endswith(('.xlsx', '.xls'))]
+    files_with_index = [f for f in files if get_index_from_filename(f) is not None]
+    files_with_index.sort(key=lambda x: get_index_from_filename(x))
 
-    # Проходимся по всем файлам в папке конкурента
-    for file_name in files:
+    if not files_with_index:
+        no_files_message = f"Нет файлов для обработки в папке {folder_path} для конкурента '{competitor_name}'"
+        print(no_files_message)
+        logging.warning(no_files_message)
+        return
+
+    # Проходимся по всем файлам в порядке индексов
+    for file_name in files_with_index:
         file_path = os.path.join(folder_path, file_name)
         try:
             # Читаем Excel файл
             df = pd.read_excel(file_path, engine="openpyxl")
 
-            # Проверяем, что в таблице есть нужные колонки (можно уточнить структуру)
+            # Проверяем, что в таблице есть нужные колонки
             required_columns = ["name", "item_type", "item_form", "prescription", "manufacturer", "country", "price"]
             if all(column in df.columns for column in required_columns):
                 # Очищаем данные от лишних пробелов в строках
@@ -65,6 +72,9 @@ def process_competitor(competitor_name):
                     else:
                         log_message = f"Пропущена дублирующая запись из файла {file_name}: {row.to_dict()}"
                         logging.info(log_message)
+            else:
+                log_message = f"Отсутствуют необходимые колонки в файле {file_name}"
+                logging.warning(log_message)
         except Exception as e:
             error_message = f"Ошибка при обработке файла {file_name}: {e}"
             logging.error(error_message)
@@ -86,7 +96,6 @@ def process_competitor(competitor_name):
         no_data_message = f"Нет данных для конкурента '{competitor_name}'"
         print(no_data_message)
         logging.warning(no_data_message)
-
 
 # Основной цикл для обработки всех папок конкурентов с использованием multiprocessing
 # Получаем список конкурентов
