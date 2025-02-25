@@ -49,7 +49,6 @@ def process_file(file_name, input_folder, output_folder, graphs_dir, hide_quanti
     df[price_column] = df[price_column].str.extract(r'(\d+\.?\d*)', expand=False)
     df[price_column] = pd.to_numeric(df[price_column], errors='coerce').fillna(0)
 
-    # Updated calculate_metrics function
     def calculate_metrics(row):
         sold = 0
         segments = []
@@ -57,7 +56,6 @@ def process_file(file_name, input_folder, output_folder, graphs_dir, hide_quanti
         prev_val = None
         segment_change_indices = []
         negative_changes = 0
-        started = False
 
         for idx, col in enumerate(quantity_columns):
             curr_val = row[col]
@@ -70,8 +68,8 @@ def process_file(file_name, input_folder, output_folder, graphs_dir, hide_quanti
                     sold += -change
                     negative_changes += 1
 
-                if prev_val == 0 and curr_val > 0:
-                    started = True
+                if curr_val > prev_val:
+                    # Увеличение обнаружено, начинаем новый сегмент
                     if temp_segment and any(temp_segment):
                         segments.append(temp_segment)
                     segment_change_indices.append(idx)
@@ -118,100 +116,87 @@ def process_file(file_name, input_folder, output_folder, graphs_dir, hide_quanti
         quantity_values = row[quantity_columns].values
         segment_change_indices = segment_change_indices_list.loc[row.name]
 
-        reduced_quantity_values = []
-        prev_val = None
-        for curr_val in quantity_values:
-            if prev_val is not None:
-                if curr_val <= prev_val:
-                    reduced_quantity_values.append(curr_val)
-                else:
-                    reduced_quantity_values.append(prev_val)
+        # Строим отформатированные даты
+        formatted_dates = []
+        for col in quantity_columns:
+            match = re.search(r'Количество.*_(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})(?:.*?)$', col)
+            if match:
+                month = match.group(2)
+                day = match.group(3)
+                hour = match.group(4)
+                minute = match.group(5)
+                formatted_date = f"{month}-{day}_{hour}-{minute}"
+                formatted_dates.append(formatted_date)
             else:
-                reduced_quantity_values.append(curr_val)
-            prev_val = curr_val
+                formatted_dates.append('')
 
-        if any(val != 0 for val in reduced_quantity_values):
-            formatted_dates = []
-            for col in quantity_columns:
-                match = re.search(r'Количество.*_(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})(?:.*?)$', col)
-                if match:
-                    month = match.group(2)
-                    day = match.group(3)
-                    hour = match.group(4)
-                    minute = match.group(5)
-                    formatted_date = f"{month}-{day}_{hour}-{minute}"
-                    formatted_dates.append(formatted_date)
-                else:
-                    formatted_dates.append('')
+        plot_df = pd.DataFrame({
+            'Дата и время': formatted_dates,
+            'Количество': quantity_values
+        })
 
-            plot_df = pd.DataFrame({
-                'Дата и время': formatted_dates,
-                'Количество': reduced_quantity_values
-            })
+        plot_df = plot_df[plot_df['Дата и время'] != '']
+        plot_df['Дата и время_DT'] = pd.to_datetime(plot_df['Дата и время'], format="%m-%d_%H-%M")
+        plot_df.sort_values('Дата и время_DT', inplace=True)
 
-            plot_df = plot_df[plot_df['Дата и время'] != '']
-            plot_df['Дата и время_DT'] = pd.to_datetime(plot_df['Дата и время'], format="%m-%d_%H-%M")
-            plot_df.sort_values('Дата и время_DT', inplace=True)
+        key_columns = df_filtered.columns[:6]
+        key_values = [str(row[col]) for col in key_columns]
+        key_string = ' - '.join(key_values)
 
-            key_columns = df_filtered.columns[:6]
-            key_values = [str(row[col]) for col in key_columns]
-            key_string = ' - '.join(key_values)
+        key_string_safe = re.sub(r'\s+', '_', key_string)
+        key_string_safe = re.sub(r'[<>:"/\\|?*]', '_', key_string_safe)
+        max_length = 100
+        if len(key_string_safe) > max_length:
+            key_string_safe = key_string_safe[:max_length] + '...'
 
-            key_string_safe = re.sub(r'\s+', '_', key_string)
-            key_string_safe = re.sub(r'[<>:"/\\|?*]', '_', key_string_safe)
-            max_length = 100
-            if len(key_string_safe) > max_length:
-                key_string_safe = key_string_safe[:max_length] + '...'
+        graph_file_name = f"{prefix}_{key_string_safe}_row_{index}_graph.html"
+        graph_file_path = os.path.join(graphs_dir, graph_file_name)
 
-            graph_file_name = f"{prefix}_{key_string_safe}_row_{index}_graph.html"
-            graph_file_path = os.path.join(graphs_dir, graph_file_name)
+        fig = go.Figure()
 
-            fig = go.Figure()
+        fig.add_annotation(
+            x=0.5, y=1.15, xref='paper', yref='paper',
+            showarrow=False, text=f"Конкурент: {competitor_name}",
+            font=dict(size=16)
+        )
 
-            fig.add_annotation(
-                x=0.5, y=1.15, xref='paper', yref='paper',
-                showarrow=False, text=f"Конкурент: {competitor_name}",
-                font=dict(size=16)
-            )
+        fig.add_trace(go.Scatter(
+            x=plot_df['Дата и время'],
+            y=plot_df['Количество'],
+            mode='lines+markers',
+            name='Количество',
+            line_shape='spline',
+            line=dict(smoothing=1.3),
+            marker=dict(size=6)
+        ))
 
-            fig.add_trace(go.Scatter(
-                x=plot_df['Дата и время'],
-                y=plot_df['Количество'],
-                mode='lines+markers',
-                name='Количество',
-                line_shape='spline',
-                line=dict(smoothing=1.3),
-                marker=dict(size=6)
-            ))
+        # Подсвечиваем индексы смены сегментов
+        for idx in segment_change_indices:
+            if idx < len(plot_df):
+                fig.add_trace(go.Scatter(
+                    x=[plot_df['Дата и время'].iloc[idx]],
+                    y=[plot_df['Количество'].iloc[idx]],
+                    mode='markers',
+                    marker=dict(size=10, color='yellow'),
+                    name='Новый сегмент'
+                ))
 
-            for idx in segment_change_indices:
-                if idx < len(plot_df):
-                    fig.add_trace(go.Scatter(
-                        x=[plot_df['Дата и время'].iloc[idx]],
-                        y=[plot_df['Количество'].iloc[idx]],
-                        mode='markers',
-                        marker=dict(size=10, color='yellow'),
-                        name='Новый сегмент'
-                    ))
+        fig.update_layout(
+            title=f"{key_string_safe}",
+            xaxis_title="Дата и время",
+            yaxis_title="Количество",
+            xaxis=dict(tickangle=45),
+            template='plotly_white',
+            width=800,
+            height=500
+        )
 
-            fig.update_layout(
-                title=f"{key_string_safe}",
-                xaxis_title="Дата и время",
-                yaxis_title="Количество",
-                xaxis=dict(tickangle=45),
-                template='plotly_white',
-                width=800,
-                height=500
-            )
+        fig.write_html(graph_file_path)
 
-            fig.write_html(graph_file_path)
-
-            relative_graph_path = os.path.join("graphs", graph_file_name)
-            link = '=HYPERLINK("{}", "{}")'.format(relative_graph_path, "Показать")
-            df_filtered.at[index, "Ссылка на график"] = link
-            df_filtered.at[index, "Название HTML"] = graph_file_name
-        else:
-            print(f"Нет данных для создания графика для строки {index}")
+        relative_graph_path = os.path.join("graphs", graph_file_name)
+        link = '=HYPERLINK("{}", "{}")'.format(relative_graph_path, "Показать")
+        df_filtered.at[index, "Ссылка на график"] = link
+        df_filtered.at[index, "Название HTML"] = graph_file_name
 
     output_file_path = os.path.join(output_folder, f"sorted_{file_name}")
 
@@ -237,7 +222,7 @@ def process_file(file_name, input_folder, output_folder, graphs_dir, hide_quanti
 
     print(f"Результат сохранён: {output_file_path}")
 
-# Main script remains unchanged
+# Главный скрипт
 input_folder = "Datasets/pre_ans"
 output_folder = "Datasets/pre_ans_sorted_graph"
 graphs_dir = os.path.join(output_folder, "graphs")

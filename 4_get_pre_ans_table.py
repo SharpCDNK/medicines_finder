@@ -125,40 +125,44 @@ def process_competitor(competitor, analysis_dir, diff_comp_dir, output_dir, enab
 
 def check_and_correct_values(df):
     quantity_columns = [col for col in df.columns if col.startswith('Количество')]
-    corrected_cells = []  # Список для хранения позиций исправленных ячеек
+    corrected_cells = []  # Список для хранения координат исправленных ячеек
 
     num_columns = len(quantity_columns)
     for idx, row in df.iterrows():
-        for t in range(num_columns - 1):
-            current_col = quantity_columns[t]
-            current_value = float(row[current_col])
-
-            # Проверяем уменьшение количества по сравнению с предыдущим шагом
-            prev_value = current_value
-            if t > 0:
-                prev_col = quantity_columns[t - 1]
-                prev_value = float(row[prev_col])
-
-            if current_value < prev_value:
-                # Ищем возврат к предыдущему уровню в следующих 1–5 шагах
-                for next_step in range(1, 6):
-                    future_index = t + next_step
-                    if future_index >= num_columns:
+        values = [float(row[col]) for col in quantity_columns]
+        i = 0
+        while i < num_columns:
+            p1 = values[i]
+            if p1 > 0:
+                start_idx = i
+                max_intermediate_positions = min(8, num_columns - i - 2)
+                found_p2 = False
+                for offset in range(1, max_intermediate_positions + 2):
+                    j = i + offset
+                    if j >= num_columns:
                         break
-
-                    future_col = quantity_columns[future_index]
-                    future_value = float(row[future_col])
-
-                    if future_value == prev_value:
-                        # Исправляем значения между текущим шагом и найденным будущим шагом
-                        for correction_index in range(t, future_index):
-                            correction_col = quantity_columns[correction_index]
-                            df.at[idx, correction_col] = prev_value
-                            # Записываем координаты исправленной ячейки
-                            col_idx = df.columns.get_loc(correction_col)
-                            corrected_cells.append((idx, col_idx))
-                        break  # Выходим из цикла, так как нашли возврат к предыдущему уровню
-                # Если возврата не найдено в течение 5 шагов, ничего не делаем
+                    p2 = values[j]
+                    if p2 > 0:
+                        if p2 <= p1:
+                            # Заменяем промежуточные значения на p2
+                            for k in range(start_idx + 1, j):
+                                values[k] = p2
+                                col_name = quantity_columns[k]
+                                df.at[idx, col_name] = p2
+                                corrected_cells.append((idx, df.columns.get_loc(col_name)))
+                            i = j  # Продолжаем поиск с позиции p2
+                            found_p2 = True
+                            break
+                        else:
+                            # Если p2 > p1, дальше искать нет смысла
+                            i = j
+                            found_p2 = True
+                            break
+                if not found_p2:
+                    # Если подходящая p2 не найдена, переходим к следующему значению
+                    i += 1
+            else:
+                i += 1
 
     return df, corrected_cells
 
@@ -175,7 +179,6 @@ def generate_pre_ans_table(analysis_dir, diff_comp_dir, output_dir, enable_corre
 
     with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
         pool.starmap(process_competitor, [(comp, analysis_dir, diff_comp_dir, output_dir, enable_correction) for comp in competitors])
-
 
 analysis_directory = "Datasets/list_for_analis"
 comparison_directory = "Datasets/diff_comp"
